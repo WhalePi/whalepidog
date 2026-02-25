@@ -116,6 +116,8 @@ Settings are stored in a JSON file. All fields are optional — defaults are sho
 
 The terminal by default looks as follows. 
 
+
+```bash
 ──────────────────────────────────────────────────────────────────────
   WhalePIDog – PAMGuard Summary View           Time: 12:01:31
 ──────────────────────────────────────────────────────────────────────
@@ -158,6 +160,7 @@ The terminal by default looks as follows.
 ──────────────────────────────────────────────────────────────────────
   [:] cmd  [s] Summary View  [t] Summary Text  [l] Log  [q] Quit  [h] Help
   [1] ping  [2] Status  [3] summary  [4] start  [5] stop
+```
 
 There are various commands which can be used to change the interface and to manually send PAMGuard commands
 
