@@ -1,0 +1,19 @@
+{
+    "pamguardJar": "/home/jdjm/Desktop/pamguard_pi5/Pamguard-2.02.18.jar",
+    "startWaitSeconds": 10,
+    "psfxFile": "/home/jdjm/Desktop/pamguard_pi5/pamguard_pi5.psfx",
+    "otherOptions": "",
+    "udpPort": 8000,
+    "libFolder": "liblinux",
+    "otherVMOptions": "",
+    "checkIntervalSeconds": 30,
+    "deploy": true,
+    "summaryIntervalSeconds": 5,
+    "workingFolder": "",
+    "database": "/home/jdjm/Desktop/pamguard_pi5/dogdatabase.sqlite3",
+    "msMemory": 2048,
+    "wavFolder": "/home/jdjm/Desktop/pamguard_pi5/PAMRecordings",
+    "jre": "java",
+    "noGui":false,
+    "mxMemory": 4096
+}
