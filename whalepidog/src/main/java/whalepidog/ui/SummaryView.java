@@ -77,7 +77,7 @@ public class SummaryView {
      * Render a full screen frame.  Clears the terminal, draws the banner,
      * then each data section derived from the latest PAMGuard summary.
      */
-    public synchronized void render() {
+    public void render() {
         String raw = watchdog.getLastSummary();
         ParsedSummary ps = SummaryParser.parse(raw);
 

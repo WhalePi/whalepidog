@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -74,9 +75,8 @@ public class TerminalUI {
     private static final String ANSI_SHOW_CUR   = "\u001B[?25h";
 
     // ── Single lock that gates ALL terminal writes ────────────────────────────
-    // Every path that touches stdout must synchronize on this object.
-    // This prevents the scheduler thread, the log-capture threads, and the
-    // input thread from interleaving their output and causing scrolling.
+    // Used only for appendLog (which runs on arbitrary capture threads) so it
+    // never races with a render task executing on the uiScheduler thread.
     private final Object renderLock = new Object();
 
     // ── Display mode ─────────────────────────────────────────────────────────
@@ -104,6 +104,13 @@ public class TerminalUI {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     private final AtomicBoolean running = new AtomicBoolean(false);
+
+    /**
+     * Set to true after a mode switch so the next scheduled render does a
+     * full screen clear before drawing, guaranteeing no stale content from the
+     * previous view bleeds through.
+     */
+    private volatile boolean pendingClear = false;
 
     /** Single-thread scheduler – only one refresh task runs at a time. */
     private final ScheduledExecutorService uiScheduler =
@@ -152,9 +159,19 @@ public class TerminalUI {
     // ── Scheduled refresh ─────────────────────────────────────────────────────
 
     private void scheduledRefresh() {
-        // Acquire renderLock so the refresh doesn't race with appendLog or
-        // anything the input thread is printing.
+        // This runs on the uiScheduler thread – the only thread that may write
+        // to the terminal in SUMMARY_VIEW / SUMMARY_TEXT / LOG modes.
+        // renderLock is only used by appendLog (capture threads), so we acquire
+        // it here to ensure no log line can interleave with a frame render.
         synchronized (renderLock) {
+            if (pendingClear) {
+                // A mode switch just happened. Erase the whole screen once so
+                // the previous view's content is completely gone before we draw
+                // the first frame of the new view.
+                System.out.print(ANSI_CLEAR);
+                System.out.flush();
+                pendingClear = false;
+            }
             switch (mode.get()) {
                 case SUMMARY_VIEW -> summaryView.render();
                 case SUMMARY_TEXT -> drawSummaryText();
@@ -217,11 +234,13 @@ public class TerminalUI {
         System.out.flush();
     }
 
-    // Called from handleInput – acquires lock then delegates to drawSummaryText
+    // Called from handleInput – submits to the uiScheduler so the render
+    // always happens on the same thread as the periodic refresh, eliminating
+    // any race between the input thread and the scheduler thread.
     private void printSummaryTextView() {
-        synchronized (renderLock) {
-            drawSummaryText();
-        }
+        submitRender(() -> {
+            synchronized (renderLock) { drawSummaryText(); }
+        });
     }
 
     private void appendBannerSB(StringBuilder sb) {
@@ -244,26 +263,6 @@ public class TerminalUI {
         sb.append(String.format("  Last check : %s%n", watchdog.getLastCheckTime()));
         sb.append(String.format("  UDP port   : %d%n", settings.getUdpPort()));
         sb.append(String.format("  Deploy     : %b%n", settings.isDeploy()));
-    }
-
-    // ── LOG view ──────────────────────────────────────────────────────────────
-
-    private void enterLogView() {
-        synchronized (renderLock) {
-            mode.set(DisplayMode.LOG);
-            System.out.print(ANSI_CLEAR);
-            System.out.println(ANSI_BOLD + ANSI_CYAN
-                    + "--- LOG view (live PAMGuard output) ---" + ANSI_RESET);
-            System.out.println(ANSI_DIM
-                    + "  [:] command  [s] summary view  [t] summary text  [q] quit"
-                    + ANSI_RESET);
-            System.out.println();
-            // Replay last 40 buffered lines for context
-            List<String> snap = new ArrayList<>(logBuffer);
-            int from = Math.max(0, snap.size() - 40);
-            for (int i = from; i < snap.size(); i++) System.out.println(snap.get(i));
-            System.out.flush();
-        }
     }
 
     // ── COMMAND mode ──────────────────────────────────────────────────────────
@@ -302,9 +301,9 @@ public class TerminalUI {
 
         // Return to prior view
         mode.set(priorMode);
-        if      (priorMode == DisplayMode.SUMMARY_VIEW) { synchronized (renderLock) { summaryView.render(); } }
-        else if (priorMode == DisplayMode.SUMMARY_TEXT) { printSummaryTextView(); }
-        else                                             { enterLogView(); }
+        if      (priorMode == DisplayMode.SUMMARY_VIEW) switchToSummaryView();
+        else if (priorMode == DisplayMode.SUMMARY_TEXT) switchToSummaryText();
+        else                                             switchToLog();
     }
 
     private void sendAndDisplay(String command) {
@@ -337,17 +336,24 @@ public class TerminalUI {
     // ── Quick-send shortcuts ──────────────────────────────────────────────────
 
     private void quickSend(String command) {
-        synchronized (renderLock) {
-            System.out.println(ANSI_CYAN + "[Quick] >> " + command + ANSI_RESET);
-            System.out.flush();
+        // Show a brief "[Quick]" notice only in LOG mode (where scrolling is
+        // expected).  In summary modes we skip the notice and just re-render
+        // after the command returns, so no raw text ever bleeds over the UI.
+        if (mode.get() == DisplayMode.LOG) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_CYAN + "[Quick] >> " + command + ANSI_RESET);
+                System.out.flush();
+            }
         }
         sendAndDisplay(command);
         sleep(400);
-        // Force immediate re-render of the active summary view
-        synchronized (renderLock) {
-            if      (mode.get() == DisplayMode.SUMMARY_VIEW) summaryView.render();
-            else if (mode.get() == DisplayMode.SUMMARY_TEXT) drawSummaryText();
-        }
+        // Force immediate re-render of the active summary view via the scheduler.
+        submitRender(() -> {
+            synchronized (renderLock) {
+                if      (mode.get() == DisplayMode.SUMMARY_VIEW) summaryView.render();
+                else if (mode.get() == DisplayMode.SUMMARY_TEXT) drawSummaryText();
+            }
+        });
     }
 
     // ── Keyboard input loop ───────────────────────────────────────────────────
@@ -388,22 +394,70 @@ public class TerminalUI {
     }
 
     private void switchToSummaryView() {
+        pendingClear = true;
         mode.set(DisplayMode.SUMMARY_VIEW);
-        synchronized (renderLock) { summaryView.render(); }
+        submitRender(() -> {
+            synchronized (renderLock) {
+                if (pendingClear) { System.out.print(ANSI_CLEAR); System.out.flush(); pendingClear = false; }
+                summaryView.render();
+            }
+        });
     }
 
     private void switchToSummaryText() {
+        pendingClear = true;
         mode.set(DisplayMode.SUMMARY_TEXT);
-        printSummaryTextView();
+        submitRender(() -> {
+            synchronized (renderLock) {
+                if (pendingClear) { System.out.print(ANSI_CLEAR); System.out.flush(); pendingClear = false; }
+                drawSummaryText();
+            }
+        });
     }
 
-    private void switchToLog() { enterLogView(); }
+    private void switchToLog() {
+        submitRender(() -> {
+            synchronized (renderLock) {
+                mode.set(DisplayMode.LOG);
+                System.out.print(ANSI_CLEAR);
+                System.out.println(ANSI_BOLD + ANSI_CYAN
+                        + "--- LOG view (live PAMGuard output) ---" + ANSI_RESET);
+                System.out.println(ANSI_DIM
+                        + "  [:] command  [s] summary view  [t] summary text  [q] quit"
+                        + ANSI_RESET);
+                System.out.println();
+                List<String> snap = new ArrayList<>(logBuffer);
+                int from = Math.max(0, snap.size() - 40);
+                for (int i = from; i < snap.size(); i++) System.out.println(snap.get(i));
+                System.out.flush();
+            }
+        });
+    }
+
+    /**
+     * Submit a render task to the single-threaded uiScheduler and block the
+     * calling (input) thread until it completes.  This guarantees the render
+     * happens after any in-progress scheduled refresh finishes, and before the
+     * next periodic refresh starts – so there is never more than one thread
+     * drawing to the terminal.
+     */
+    private void submitRender(Runnable task) {
+        try {
+            Future<?> f = uiScheduler.submit(task);
+            f.get(); // wait for completion on the input thread
+        } catch (Exception ignored) {}
+    }
 
     private void quit() {
-        synchronized (renderLock) {
-            System.out.println(ANSI_YELLOW + "\n[UI] Quitting..." + ANSI_RESET);
-            System.out.flush();
-        }
+        // Switch to a clean scrolling state before the farewell message,
+        // regardless of which view was active.
+        submitRender(() -> {
+            synchronized (renderLock) {
+                System.out.print(ANSI_CLEAR);
+                System.out.println(ANSI_YELLOW + "\n[UI] Quitting..." + ANSI_RESET);
+                System.out.flush();
+            }
+        });
         running.set(false);
         watchdog.stop(true);
     }
@@ -413,8 +467,11 @@ public class TerminalUI {
     private void appendLog(String line) {
         logBuffer.add(line);
         if (logBuffer.size() > MAX_LOG_LINES) logBuffer.remove(0);
-        // Only write to stdout in LOG mode, and only while holding renderLock
-        // so we never interleave with a summary refresh.
+        // Only write to stdout in LOG mode.  Use renderLock so a log line
+        // arriving on a capture thread can never interleave with the scheduled
+        // refresh task (which also holds renderLock while drawing).
+        // In SUMMARY_VIEW / SUMMARY_TEXT / COMMAND modes we stay completely
+        // silent – the scheduler will display everything at the next refresh.
         if (mode.get() == DisplayMode.LOG) {
             synchronized (renderLock) {
                 if (mode.get() == DisplayMode.LOG) { // re-check inside lock
@@ -428,32 +485,43 @@ public class TerminalUI {
     // ── Help ─────────────────────────────────────────────────────────────────
 
     private void printHelp() {
-        synchronized (renderLock) {
-            System.out.println();
-            System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
-            System.out.println(ANSI_BOLD + "                    WhalePIDog  Help"                            + ANSI_RESET);
-            System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
-            System.out.println("  View switching:");
-            System.out.println("    s  - Summary VIEW  (graphical: level meters, GPS, sensors...)");
-            System.out.println("    t  - Summary TEXT  (raw PAMGuard text, no-scroll)");
-            System.out.println("    l  - LOG view      (scrolling PAMGuard stdout/stderr)");
-            System.out.println();
-            System.out.println("  UDP quick-send shortcuts:");
-            System.out.println("    1  - ping");
-            System.out.println("    2  - Status    (updates status banner immediately)");
-            System.out.println("    3  - summary   (updates summary panel immediately)");
-            System.out.println("    4  - start");
-            System.out.println("    5  - stop");
-            System.out.println();
-            System.out.println("  Command mode  ( press : ):");
-            System.out.println("    Type any UDP command and press Enter.");
-            System.out.println("    Known: ping  Status  summary  start  stop  Exit");
-            System.out.println("    Empty line or 'back' returns to the previous view.");
-            System.out.println();
-            System.out.println("  q  - Quit    h  - Help");
-            System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
-            System.out.println();
-            System.out.flush();
+        // At startup the scheduler hasn't started yet, so submit() would be
+        // queued for later – that's fine.  During normal operation this ensures
+        // the help text never overlaps a summary render.
+        Runnable helpTask = () -> {
+            synchronized (renderLock) {
+                System.out.print(ANSI_CLEAR);
+                System.out.println();
+                System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
+                System.out.println(ANSI_BOLD + "                    WhalePIDog  Help"                            + ANSI_RESET);
+                System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
+                System.out.println("  View switching:");
+                System.out.println("    s  - Summary VIEW  (graphical: level meters, GPS, sensors...)");
+                System.out.println("    t  - Summary TEXT  (raw PAMGuard text, no-scroll)");
+                System.out.println("    l  - LOG view      (scrolling PAMGuard stdout/stderr)");
+                System.out.println();
+                System.out.println("  UDP quick-send shortcuts:");
+                System.out.println("    1  - ping");
+                System.out.println("    2  - Status    (updates status banner immediately)");
+                System.out.println("    3  - summary   (updates summary panel immediately)");
+                System.out.println("    4  - start");
+                System.out.println("    5  - stop");
+                System.out.println();
+                System.out.println("  Command mode  ( press : ):");
+                System.out.println("    Type any UDP command and press Enter.");
+                System.out.println("    Known: ping  Status  summary  start  stop  Exit");
+                System.out.println("    Empty line or 'back' returns to the previous view.");
+                System.out.println();
+                System.out.println("  q  - Quit    h  - Help");
+                System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+        };
+        if (running.get()) {
+            submitRender(helpTask);
+        } else {
+            helpTask.run(); // startup – scheduler not yet running, call directly
         }
     }
 

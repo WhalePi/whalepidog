@@ -323,8 +323,10 @@ public class WatchdogController {
     public void setStateListener(Consumer<State>  l) { this.stateListener = l; }
     public void setLogListener  (Consumer<String> l) {
         this.logListener = l;
-        // Also forward future PAMGuard process output
-        pamProcess.addLineListener(this::log);
+        // NOTE: do NOT add a pamProcess.addLineListener here.
+        // TerminalUI registers its own listener (appendLog) directly on the
+        // PamProcess so that PAMGuard output is controlled by the renderLock.
+        // Adding a second listener here would double-print every PAMGuard line.
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -339,7 +341,9 @@ public class WatchdogController {
     private void log(String msg) {
         String ts  = TS_FMT.format(Instant.now());
         String out = "[" + ts + "] " + msg;
-        System.out.println(out); // also log to JVM stdout
+        // Only route through the logListener (which the UI controls).
+        // Do NOT call System.out.println here – that would bypass the UI's
+        // renderLock and cause text to appear over the Summary / Summary-Text views.
         if (logListener != null) {
             try { logListener.accept(out); } catch (Exception ignored) {}
         }
