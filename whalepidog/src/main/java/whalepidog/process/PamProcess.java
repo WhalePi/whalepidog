@@ -126,11 +126,11 @@ public class PamProcess {
 
         String wav = settings.getWavFolder();
         if (wav != null && !wav.isBlank())
-            sb.append(" -wavfolder \"").append(wav).append('"');
+            sb.append(" -wavfilefolder \"").append(wav).append('"');
 
         String db = settings.getDatabase();
         if (db != null && !db.isBlank())
-            sb.append(" -database \"").append(db).append('"');
+            sb.append(" -databasefile \"").append(db).append('"');
 
         // nogui flag – only set if running headless
         if (settings.isNoGui())
