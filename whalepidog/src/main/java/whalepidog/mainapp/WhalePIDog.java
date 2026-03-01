@@ -93,7 +93,7 @@ public class WhalePIDog {
         }
 
         // ── 4. Create watchdog and UI ─────────────────────────────────────────
-        WatchdogController watchdog = new WatchdogController(settings);
+        WatchdogController watchdog = new WatchdogController(settings, settingsFile);
         TerminalUI         ui       = new TerminalUI(watchdog, settings);
 
         // State changes are already logged inside WatchdogController.

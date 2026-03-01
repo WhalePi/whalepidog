@@ -60,6 +60,7 @@ public class SummaryParser {
         public String  button;          // "start" / "stop"
         public String  state;           // "recording" / "stopped"
         public double  freeSpaceMb;     // remaining disk space in MB
+        public double  fileSizeMb;      // current recording file size in MB
         // channel amplitudes (dB) – may be empty
         public final List<ChannelLevel> channelAmplitudes = new ArrayList<>();
     }
@@ -95,6 +96,24 @@ public class SummaryParser {
         public double tempCelsius;
     }
 
+    public static class SystemDiagnosticsData {
+        public long pamguardMemoryUsedMB;
+        public long pamguardMemoryTotalMB;
+        public long pamguardMemoryMaxMB;
+        public long systemMemoryUsedMB;
+        public long systemMemoryTotalMB;
+        public final List<CpuCore> cpuCores = new ArrayList<>();
+    }
+
+    public static class CpuCore {
+        public final int index;
+        public final double usagePercent;
+        public CpuCore(int index, double usagePercent) {
+            this.index = index;
+            this.usagePercent = usagePercent;
+        }
+    }
+
     public static class RawSection {
         public final String tag;
         public final String content;
@@ -121,6 +140,21 @@ public class SummaryParser {
             parseLine(line, result);
         }
         return result;
+    }
+
+    /**
+     * Parse the diagnostics response (direct XML, not wrapped in section tags).
+     *
+     * @param raw the XML response from the diagnostics command
+     * @return SystemDiagnosticsData, or null if parsing fails
+     */
+    public static SystemDiagnosticsData parseDiagnostics(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return parseSystemDiagnosticsXml(raw);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ── Line-level dispatch ────────────────────────────────────────────────────
@@ -193,6 +227,7 @@ public class SummaryParser {
         data.button     = textContent(doc, "button", "");
         data.state      = textContent(doc, "state", "");
         data.freeSpaceMb = doubleContent(doc, "freeSpaceMB", 0);
+        data.fileSizeMb  = doubleContent(doc, "fileSizeMB", 0);
 
         // Channel amplitudes inside <channelAmplitudesdB>
         NodeList channels = doc.getElementsByTagName("channelAmplitudesdB");
@@ -268,6 +303,33 @@ public class SummaryParser {
                 data.tempCelsius = Double.parseDouble(rest);
             }
         } catch (Exception ignored) {}
+        return data;
+    }
+
+    private static SystemDiagnosticsData parseSystemDiagnosticsXml(String xmlContent) throws Exception {
+        // xmlContent is just <SystemDiagnostics>...</SystemDiagnostics>
+        Document doc = parseXml("<root>" + xmlContent + "</root>");
+        SystemDiagnosticsData data = new SystemDiagnosticsData();
+        
+        data.pamguardMemoryUsedMB = longContent(doc, "pamguardMemoryUsedMB", 0);
+        data.pamguardMemoryTotalMB = longContent(doc, "pamguardMemoryTotalMB", 0);
+        data.pamguardMemoryMaxMB = longContent(doc, "pamguardMemoryMaxMB", 0);
+        data.systemMemoryUsedMB = longContent(doc, "systemMemoryUsedMB", 0);
+        data.systemMemoryTotalMB = longContent(doc, "systemMemoryTotalMB", 0);
+        
+        // Parse CPU cores
+        NodeList cpuCoresNodes = doc.getElementsByTagName("cpuCores");
+        if (cpuCoresNodes.getLength() > 0) {
+            Element cpuCoresEl = (Element) cpuCoresNodes.item(0);
+            NodeList cores = cpuCoresEl.getElementsByTagName("core");
+            for (int i = 0; i < cores.getLength(); i++) {
+                Element core = (Element) cores.item(i);
+                int index = intAttr(core, "index", i);
+                double usage = Double.parseDouble(core.getTextContent().trim());
+                data.cpuCores.add(new CpuCore(index, usage));
+            }
+        }
+        
         return data;
     }
 

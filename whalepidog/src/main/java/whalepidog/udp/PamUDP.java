@@ -38,17 +38,18 @@ public class PamUDP {
     public static final int PAM_INITIALISING = 4;
 
     // ── Command strings ───────────────────────────────────────────────────────
-    public static final String CMD_PING    = "ping";
-    public static final String CMD_STATUS  = "Status";
-    public static final String CMD_SUMMARY = "summary";
-    public static final String CMD_START   = "start";
-    public static final String CMD_STOP    = "stop";
-    public static final String CMD_EXIT    = "Exit";
-    public static final String CMD_KILL    = "kill";
+    public static final String CMD_PING        = "ping";
+    public static final String CMD_STATUS      = "Status";
+    public static final String CMD_SUMMARY     = "summary";
+    public static final String CMD_DIAGNOSTICS = "diagnostics";
+    public static final String CMD_START       = "start";
+    public static final String CMD_STOP        = "stop";
+    public static final String CMD_EXIT        = "Exit";
+    public static final String CMD_KILL        = "kill";
 
     /** All commands PAMGuard is known to understand (case-insensitive match). */
     public static final String[] ALL_KNOWN = {
-        CMD_PING, CMD_STATUS, CMD_SUMMARY, CMD_START, CMD_STOP, CMD_EXIT, CMD_KILL
+        CMD_PING, CMD_STATUS, CMD_SUMMARY, CMD_DIAGNOSTICS, CMD_START, CMD_STOP, CMD_EXIT, CMD_KILL
     };
 
     // ── Buffer sizes ─────────────────────────────────────────────────────────
@@ -100,6 +101,10 @@ public class PamUDP {
 
     public String getSummary(int timeoutMs) {
         return send(watchdogSocket, CMD_SUMMARY, timeoutMs, SUMMARY_BUFFER_BYTES);
+    }
+
+    public String getDiagnostics(int timeoutMs) {
+        return send(watchdogSocket, CMD_DIAGNOSTICS, timeoutMs, SUMMARY_BUFFER_BYTES);
     }
 
     public String sendStart(int timeoutMs) {

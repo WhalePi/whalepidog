@@ -41,6 +41,7 @@ public class SummaryView {
     private static final String RD = "\u001B[31m";  // red
     private static final String MG = "\u001B[35m";  // magenta
     private static final String BL = "\u001B[34m";  // blue
+    private static final String OR = "\u001B[38;5;208m";  // 256-color orange
     /** Move cursor to top-left WITHOUT erasing – content is overwritten in place. */
     private static final String HOME       = "\u001B[H";
     /** Erase from cursor to end of screen (clears leftover lines after shorter content). */
@@ -132,7 +133,7 @@ public class SummaryView {
         sb.append("\n");
         sb.append(B).append(divider()).append(R).append("\n");
         sb.append("  ").append(DM)
-          .append("[:] cmd  [s] Summary View  [t] Summary Text  [l] Log  [q] Quit  [h] Help")
+          .append("[:] cmd  [s] Summary View  [t] Summary Text  [l] Log  [d] Diagnostics  [q] Quit")
           .append(R).append("\n");
         sb.append("  ").append(DM)
           .append("[1] ping  [2] Status  [3] summary  [4] start  [5] stop")
@@ -160,6 +161,7 @@ public class SummaryView {
         sb.append(B).append(CY).append(divider()).append(R).append("\n");
         sb.append("  Dog: ").append(colourState(s))
           .append("   PAM: ").append(colourPamStatus(pst))
+          .append("   Deploy: ").append(colourDeploy(settings.isDeploy()))
           .append("   Up: ").append(B).append(formatUptime(upMs)).append(R)
           .append("   Restarts: ").append(watchdog.getRestartCount())
           .append("   Port: ").append(settings.getUdpPort())
@@ -211,6 +213,14 @@ public class SummaryView {
           .append("   Button: ").append(B).append(data.button).append(R)
           .append("\n");
 
+        // File size (if recording or file exists)
+        if (data.fileSizeMb > 0) {
+            double fileSizeGB = data.fileSizeMb / 1024.0;
+            sb.append(B).append(CY).append("  │ ").append(R)
+              .append(String.format("File size: %.3f MB  (%.3f GB)", data.fileSizeMb, fileSizeGB))
+              .append("\n");
+        }
+
         // Free space bar
         double freeMb = data.freeSpaceMb;
         double freeGb = freeMb / 1024.0;
@@ -224,7 +234,7 @@ public class SummaryView {
         sb.append(diskColor).append(B);
         for (int i = 0; i < DISK_W; i++) sb.append(i < filled ? FULL : LIGHT);
         sb.append(R);
-        sb.append(String.format("  %7.1f GB", freeGb));
+        sb.append(String.format("  %7.3f GB", freeGb));
         sb.append("\n");
 
         sb.append(B).append(CY).append("  └").append(thin(59)).append(R).append("\n\n");
@@ -415,6 +425,14 @@ public class SummaryView {
             case PamUDP.PAM_INITIALISING -> MG + B + name + R;
             default                      -> DM + name + R;
         };
+    }
+
+    private static String colourDeploy(boolean deploy) {
+        if (deploy) {
+            return GR + B + "true" + R;
+        } else {
+            return OR + B + "false" + R;
+        }
     }
 
     private static String formatUptime(long ms) {

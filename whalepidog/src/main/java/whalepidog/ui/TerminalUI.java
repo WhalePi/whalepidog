@@ -68,6 +68,7 @@ public class TerminalUI {
     private static final String ANSI_CYAN    = "\u001B[36m";
     private static final String ANSI_RED     = "\u001B[31m";
     private static final String ANSI_MAGENTA = "\u001B[35m";
+    private static final String ANSI_ORANGE  = "\u001B[38;5;208m";  // 256-color orange
     private static final String ANSI_CLEAR   = "\u001B[H\u001B[2J";
     private static final String ANSI_HOME    = "\u001B[H";
     private static final String ANSI_ERASE_DOWN = "\u001B[J";
@@ -80,7 +81,7 @@ public class TerminalUI {
     private final Object renderLock = new Object();
 
     // ── Display mode ─────────────────────────────────────────────────────────
-    public enum DisplayMode { SUMMARY_VIEW, SUMMARY_TEXT, LOG, COMMAND }
+    public enum DisplayMode { SUMMARY_VIEW, SUMMARY_TEXT, LOG, DIAGNOSTICS, COMMAND }
 
     private final AtomicReference<DisplayMode> mode =
             new AtomicReference<>(DisplayMode.SUMMARY_VIEW);
@@ -92,6 +93,7 @@ public class TerminalUI {
     private final WatchdogController watchdog;
     private final WhalePIDogSettings settings;
     private final SummaryView        summaryView;
+    private final DiagnosticsView    diagnosticsView;
 
     // ── Log buffer (LOG mode) ─────────────────────────────────────────────────
     private static final int MAX_LOG_LINES = 1000;
@@ -101,6 +103,9 @@ public class TerminalUI {
     private volatile String lastCmd     = "";
     private volatile String lastCmdResp = "";
     private volatile String lastCmdTime = "";
+    
+    // ── Last diagnostics data (for DIAGNOSTICS view) ─────────────────────────
+    private final AtomicReference<String> lastDiagnostics = new AtomicReference<>("");
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -128,9 +133,10 @@ public class TerminalUI {
     // ── Constructor ───────────────────────────────────────────────────────────
 
     public TerminalUI(WatchdogController watchdog, WhalePIDogSettings settings) {
-        this.watchdog    = watchdog;
-        this.settings    = settings;
-        this.summaryView = new SummaryView(watchdog, settings);
+        this.watchdog        = watchdog;
+        this.settings        = settings;
+        this.summaryView     = new SummaryView(watchdog, settings);
+        this.diagnosticsView = new DiagnosticsView(watchdog, settings);
 
         // Route all incoming log lines through appendLog.
         // appendLog only echoes to stdout in LOG mode and always holds renderLock.
@@ -160,9 +166,19 @@ public class TerminalUI {
 
     private void scheduledRefresh() {
         // This runs on the uiScheduler thread – the only thread that may write
-        // to the terminal in SUMMARY_VIEW / SUMMARY_TEXT / LOG modes.
+        // to the terminal in SUMMARY_VIEW / SUMMARY_TEXT / DIAGNOSTICS / LOG modes.
         // renderLock is only used by appendLog (capture threads), so we acquire
         // it here to ensure no log line can interleave with a frame render.
+        
+        // Fetch diagnostics if in DIAGNOSTICS mode
+        DisplayMode currentMode = mode.get();
+        if (currentMode == DisplayMode.DIAGNOSTICS) {
+            String diag = watchdog.sendCommandAndUpdate(PamUDP.CMD_DIAGNOSTICS, 3000);
+            if (diag != null) {
+                lastDiagnostics.set(diag);
+            }
+        }
+        
         synchronized (renderLock) {
             if (pendingClear) {
                 // A mode switch just happened. Erase the whole screen once so
@@ -172,9 +188,10 @@ public class TerminalUI {
                 System.out.flush();
                 pendingClear = false;
             }
-            switch (mode.get()) {
+            switch (currentMode) {
                 case SUMMARY_VIEW -> summaryView.render();
                 case SUMMARY_TEXT -> drawSummaryText();
+                case DIAGNOSTICS  -> diagnosticsView.renderFrame(lastDiagnostics.get());
                 default           -> {} // LOG / COMMAND own their output
             }
         }
@@ -258,11 +275,11 @@ public class TerminalUI {
         sb.append(String.format("  Time       : %s%n", now));
         sb.append(String.format("  Dog state  : %s%n", colourState(s)));
         sb.append(String.format("  PAM status : %s%n", colourPamStatus(pStat)));
+        sb.append(String.format("  Deploy     : %s%n", colourDeploy(settings.isDeploy())));
         sb.append(String.format("  Uptime     : %s%n", formatUptime(upMs)));
         sb.append(String.format("  Restarts   : %d%n", watchdog.getRestartCount()));
         sb.append(String.format("  Last check : %s%n", watchdog.getLastCheckTime()));
         sb.append(String.format("  UDP port   : %d%n", settings.getUdpPort()));
-        sb.append(String.format("  Deploy     : %b%n", settings.isDeploy()));
     }
 
     // ── COMMAND mode ──────────────────────────────────────────────────────────
@@ -378,6 +395,7 @@ public class TerminalUI {
             case "s"  -> switchToSummaryView();
             case "t"  -> switchToSummaryText();
             case "l"  -> switchToLog();
+            case "d"  -> switchToDiagnostics();
             case "q"  -> quit();
             case "h"  -> printHelp();
             case "1"  -> quickSend(PamUDP.CMD_PING);
@@ -423,13 +441,29 @@ public class TerminalUI {
                 System.out.println(ANSI_BOLD + ANSI_CYAN
                         + "--- LOG view (live PAMGuard output) ---" + ANSI_RESET);
                 System.out.println(ANSI_DIM
-                        + "  [:] command  [s] summary view  [t] summary text  [q] quit"
+                        + "  [:] command  [s] summary view  [t] summary text  [d] diagnostics  [q] quit"
                         + ANSI_RESET);
                 System.out.println();
                 List<String> snap = new ArrayList<>(logBuffer);
                 int from = Math.max(0, snap.size() - 40);
                 for (int i = from; i < snap.size(); i++) System.out.println(snap.get(i));
                 System.out.flush();
+            }
+        });
+    }
+
+    private void switchToDiagnostics() {
+        pendingClear = true;
+        mode.set(DisplayMode.DIAGNOSTICS);
+        // Fetch diagnostics immediately
+        submitRender(() -> {
+            String diag = watchdog.sendCommandAndUpdate(PamUDP.CMD_DIAGNOSTICS, 3000);
+            if (diag != null) {
+                lastDiagnostics.set(diag);
+            }
+            synchronized (renderLock) {
+                if (pendingClear) { System.out.print(ANSI_CLEAR); System.out.flush(); pendingClear = false; }
+                diagnosticsView.renderFrame(lastDiagnostics.get());
             }
         });
     }
@@ -548,6 +582,14 @@ public class TerminalUI {
             case PamUDP.PAM_INITIALISING -> ANSI_MAGENTA + ANSI_BOLD + name + ANSI_RESET;
             default                      -> ANSI_DIM     + name + ANSI_RESET;
         };
+    }
+
+    private String colourDeploy(boolean deploy) {
+        if (deploy) {
+            return ANSI_GREEN + ANSI_BOLD + "true" + ANSI_RESET;
+        } else {
+            return ANSI_ORANGE + ANSI_BOLD + "false" + ANSI_RESET;
+        }
     }
 
     // ── Misc helpers ──────────────────────────────────────────────────────────

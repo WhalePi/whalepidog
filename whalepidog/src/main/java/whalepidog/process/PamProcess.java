@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -48,6 +49,9 @@ public class PamProcess {
      * @return {@code true} if the OS process started without error
      */
     public boolean launch() {
+        // Set microphone volume to zero before starting PAMGuard
+        setMicrophoneVolume();
+
         String commandLine = buildCommandLine();
         broadcastLine("[WhalePIDog] Launching PAMGuard: " + commandLine);
 
@@ -92,6 +96,40 @@ public class PamProcess {
     public boolean isAlive() {
         Process p = process;
         return p != null && p.isAlive();
+    }
+
+    /**
+     * Set the microphone volume to zero before starting PAMGuard.
+     * This is required for certain sound cards that only work properly when
+     * the Line input volume is set to zero.
+     */
+    private void setMicrophoneVolume() {
+        try {
+            broadcastLine("[WhalePIDog] Setting microphone volume to zero...");
+            String[] cmd = {"/bin/sh", "-c", "amixer -c 0 set Line 0"};
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            
+            // Wait for the command to complete (with timeout)
+            boolean completed = p.waitFor(5, TimeUnit.SECONDS);
+            if (!completed) {
+                broadcastLine("[WhalePIDog] WARNING: amixer command timed out.");
+                p.destroyForcibly();
+            } else {
+                int exitCode = p.exitValue();
+                if (exitCode == 0) {
+                    broadcastLine("[WhalePIDog] Microphone volume set successfully.");
+                } else {
+                    broadcastLine("[WhalePIDog] WARNING: amixer exited with code " + exitCode);
+                }
+            }
+        } catch (IOException e) {
+            broadcastLine("[WhalePIDog] WARNING: Failed to set microphone volume: " + e.getMessage());
+        } catch (InterruptedException e) {
+            broadcastLine("[WhalePIDog] WARNING: Interrupted while setting microphone volume.");
+            Thread.currentThread().interrupt();
+        }
     }
 
     // ── Command line builder ─────────────────────────────────────────────────

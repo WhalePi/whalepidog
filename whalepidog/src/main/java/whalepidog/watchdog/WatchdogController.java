@@ -1,9 +1,11 @@
 package whalepidog.watchdog;
 
 import whalepidog.process.PamProcess;
+import whalepidog.settings.SettingsManager;
 import whalepidog.settings.WhalePIDogSettings;
 import whalepidog.udp.PamUDP;
 
+import java.io.File;
 import java.net.SocketException;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -41,6 +43,7 @@ public class WatchdogController {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final WhalePIDogSettings    settings;
+    private final File                  settingsFile;
     private final PamProcess            pamProcess;
     private       PamUDP                udp;
 
@@ -68,9 +71,10 @@ public class WatchdogController {
     /** Listeners notified on log messages (called on scheduler thread). */
     private Consumer<String> logListener;
 
-    public WatchdogController(WhalePIDogSettings settings) {
-        this.settings   = settings;
-        this.pamProcess = new PamProcess(settings);
+    public WatchdogController(WhalePIDogSettings settings, File settingsFile) {
+        this.settings     = settings;
+        this.settingsFile = settingsFile;
+        this.pamProcess   = new PamProcess(settings);
     }
 
     // ── Start / Stop ─────────────────────────────────────────────────────────
@@ -269,6 +273,11 @@ public class WatchdogController {
      * {@code summary} the response is stored and {@link #getLastSummary()}
      * is updated.  All other commands return the raw response string.
      *
+     * <p>If the command is {@code start}, the {@code deploy} setting is set
+     * to {@code true} and saved.  If the command is {@code stop}, the
+     * {@code deploy} setting is set to {@code false} and saved.  This ensures
+     * PAMGuard maintains the user's desired state even after a Pi restart.
+     *
      * @param command   the exact command string to send
      * @param timeoutMs milliseconds to wait for a reply
      * @return the raw response from PAMGuard, or {@code null} on timeout / error
@@ -306,6 +315,16 @@ public class WatchdogController {
                 } catch (Exception ignored) {}
             } else if (command.equalsIgnoreCase(PamUDP.CMD_SUMMARY)) {
                 lastSummary.set(response.trim());
+            } else if (command.equalsIgnoreCase(PamUDP.CMD_START)) {
+                // User manually started PAMGuard – persist this choice
+                settings.setDeploy(true);
+                saveSettings();
+                log("[Deploy] deploy set to TRUE and saved (PAMGuard will auto-start on restart).");
+            } else if (command.equalsIgnoreCase(PamUDP.CMD_STOP)) {
+                // User manually stopped PAMGuard – persist this choice
+                settings.setDeploy(false);
+                saveSettings();
+                log("[Deploy] deploy set to FALSE and saved (PAMGuard will NOT auto-start on restart).");
             }
         }
 
@@ -330,6 +349,17 @@ public class WatchdogController {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void saveSettings() {
+        if (settingsFile == null) {
+            log("[Deploy] WARNING: Cannot save settings – settingsFile is null.");
+            return;
+        }
+        boolean ok = SettingsManager.save(settingsFile, settings);
+        if (!ok) {
+            log("[Deploy] ERROR: Failed to save settings to " + settingsFile.getAbsolutePath());
+        }
+    }
 
     private void setState(State s) {
         state.set(s);
