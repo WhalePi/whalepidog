@@ -1,0 +1,24 @@
+{
+  "pamguardJar": "/home/jdjm/Desktop/pamguard_pi5/Pamguard-2.02.18.jar",
+  "psfxFile": "/home/jdjm/Desktop/pamguard_pi5/pamguard_pi5.psfx",
+  "wavFolder": "/home/jdjm/Desktop/pamguard_pi5/PAMRecordings",
+  "database": "/home/jdjm/Desktop/pamguard_pi5/dogdatabase.sqlite3",
+  "libFolder": "lib64",
+  "jre": "java",
+  "mxMemory": 4096,
+  "msMemory": 2048,
+  "otherVMOptions": "",
+  "otherOptions": "",
+  "deploy": true,
+  "noGui": true,
+  "udpPort": 8000,
+  "checkIntervalSeconds": 30,
+  "summaryIntervalSeconds": 5,
+  "startWaitSeconds": 10,
+  "workingFolder": "",
+  "bluetoothSettings": {
+    "bluetoothEnabled": false,
+    "bluetoothPairing": true,
+    "verbose": false
+  }
+}

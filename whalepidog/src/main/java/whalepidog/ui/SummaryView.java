@@ -153,6 +153,7 @@ public class SummaryView {
         int    pst    = watchdog.getPamStatus();
         long   upMs   = System.currentTimeMillis() - watchdog.getStartTime();
         String now    = TS_FMT.format(Instant.now());
+        boolean btConnected = watchdog.isBluetoothConnected();
 
         sb.append(B).append(CY).append(divider()).append(R).append("\n");
         sb.append(B).append(CY)
@@ -164,8 +165,14 @@ public class SummaryView {
           .append("   Deploy: ").append(colourDeploy(settings.isDeploy()))
           .append("   Up: ").append(B).append(formatUptime(upMs)).append(R)
           .append("   Restarts: ").append(watchdog.getRestartCount())
-          .append("   Port: ").append(settings.getUdpPort())
-          .append("\n");
+          .append("   Port: ").append(settings.getUdpPort());
+        
+        // Add Bluetooth status if enabled
+        if (settings.getBluetoothSettings().isBluetoothEnabled()) {
+            sb.append("   BT: ").append(btConnected ? GR + B + "●" + R : DM + "○" + R);
+        }
+        
+        sb.append("\n");
         sb.append("\n");
     }
 

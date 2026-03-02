@@ -1,5 +1,7 @@
 package whalepidog.settings;
 
+import whalepidog.bluetooth.BluetoothSettings;
+
 /**
  * Settings for the WhalePIDog watchdog application.
  * These are loaded from a JSON file at startup.
@@ -82,6 +84,11 @@ public class WhalePIDogSettings {
     /** Working directory for the PAMGuard process. If empty, the jar directory is used. */
     private String workingFolder = "";
 
+    // ── Bluetooth settings ───────────────────────────────────────────────────
+
+    /** Bluetooth communication settings. */
+    private BluetoothSettings bluetoothSettings = new BluetoothSettings();
+
     // ── Getters / Setters ────────────────────────────────────────────────────
 
     public String getPamguardJar() { return pamguardJar; }
@@ -134,6 +141,11 @@ public class WhalePIDogSettings {
 
     public String getWorkingFolder() { return workingFolder; }
     public void setWorkingFolder(String workingFolder) { this.workingFolder = workingFolder; }
+
+    public BluetoothSettings getBluetoothSettings() { return bluetoothSettings; }
+    public void setBluetoothSettings(BluetoothSettings bluetoothSettings) { 
+        this.bluetoothSettings = bluetoothSettings != null ? bluetoothSettings : new BluetoothSettings();
+    }
 
     @Override
     public String toString() {

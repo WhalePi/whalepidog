@@ -1,5 +1,6 @@
 package whalepidog.watchdog;
 
+import whalepidog.bluetooth.BluetoothCommands;
 import whalepidog.process.PamProcess;
 import whalepidog.settings.SettingsManager;
 import whalepidog.settings.WhalePIDogSettings;
@@ -46,6 +47,7 @@ public class WatchdogController {
     private final File                  settingsFile;
     private final PamProcess            pamProcess;
     private       PamUDP                udp;
+    private       BluetoothCommands     bluetooth;
 
     /** Scheduler for health-check and summary polling tasks. */
     private final ScheduledExecutorService scheduler =
@@ -96,6 +98,19 @@ public class WatchdogController {
             return;
         }
 
+        // Initialize Bluetooth if enabled
+        if (settings.getBluetoothSettings().isBluetoothEnabled()) {
+            try {
+                bluetooth = new BluetoothCommands(this, settings.getBluetoothSettings());
+                bluetooth.setLogListener(this::log);
+                bluetooth.start();
+                log("Bluetooth server started");
+            } catch (Exception e) {
+                log("WARNING: Failed to start Bluetooth server – " + e.getMessage());
+                // Continue anyway – Bluetooth is optional
+            }
+        }
+
         setState(State.STARTING);
         startTime.set(System.currentTimeMillis());
         log("=== WhalePIDog starting ===");
@@ -131,6 +146,10 @@ public class WatchdogController {
         if (udp != null) {
             udp.close();
             udp = null;
+        }
+        if (bluetooth != null) {
+            bluetooth.stop();
+            bluetooth = null;
         }
         setState(State.STOPPED);
         log("=== WhalePIDog stopped ===");
@@ -338,6 +357,7 @@ public class WatchdogController {
     public int    getRestartCount()  { return restartCount.get(); }
     public long   getStartTime()     { return startTime.get(); }
     public PamProcess getPamProcess(){ return pamProcess; }
+    public boolean isBluetoothConnected() { return bluetooth != null && bluetooth.isConnected(); }
 
     public void setStateListener(Consumer<State>  l) { this.stateListener = l; }
     public void setLogListener  (Consumer<String> l) {

@@ -6,6 +6,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import org.json.JSONObject;
+import whalepidog.bluetooth.BluetoothSettings;
 
 /**
  * Reads and writes {@link WhalePIDogSettings} to / from a JSON file.
@@ -71,6 +72,16 @@ public class SettingsManager {
             if (jo.has("startWaitSeconds"))                                               s.setStartWaitSeconds(jo.getInt("startWaitSeconds"));
             if (jo.has("workingFolder")          && !jo.isNull("workingFolder"))          s.setWorkingFolder(jo.getString("workingFolder"));
 
+            // Load Bluetooth settings if present
+            if (jo.has("bluetoothSettings") && !jo.isNull("bluetoothSettings")) {
+                JSONObject btJson = jo.getJSONObject("bluetoothSettings");
+                BluetoothSettings bt = new BluetoothSettings();
+                if (btJson.has("bluetoothEnabled"))  bt.setBluetoothEnabled(btJson.getBoolean("bluetoothEnabled"));
+                if (btJson.has("bluetoothPairing"))  bt.setBluetoothPairing(btJson.getBoolean("bluetoothPairing"));
+                if (btJson.has("verbose"))           bt.setVerbose(btJson.getBoolean("verbose"));
+                s.setBluetoothSettings(bt);
+            }
+
             return s;
 
         } catch (Exception e) {
@@ -106,6 +117,15 @@ public class SettingsManager {
         jo.put("summaryIntervalSeconds", settings.getSummaryIntervalSeconds());
         jo.put("startWaitSeconds",       settings.getStartWaitSeconds());
         jo.put("workingFolder",          settings.getWorkingFolder());
+
+        // Save Bluetooth settings
+        if (settings.getBluetoothSettings() != null) {
+            JSONObject btJson = new JSONObject();
+            btJson.put("bluetoothEnabled", settings.getBluetoothSettings().isBluetoothEnabled());
+            btJson.put("bluetoothPairing", settings.getBluetoothSettings().isBluetoothPairing());
+            btJson.put("verbose",          settings.getBluetoothSettings().isVerbose());
+            jo.put("bluetoothSettings", btJson);
+        }
 
         try {
             File parent = file.getAbsoluteFile().getParentFile();
