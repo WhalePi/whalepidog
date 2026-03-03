@@ -45,10 +45,12 @@ class BLEPeripheral:
         self.verbose = verbose
         self.is_connected = False
         self.peripheral_app = None
-        self.tx_characteristic = None   # set by notify_callback
+        self.tx_characteristic = None   # set during start(), NOT by callback
         self.tx_notifying = False
         self.write_lock = Lock()
         self.running = True
+        # Buffer holding the latest response so read-based clients can poll it
+        self.last_tx_value = []
 
         self.log(f"Initializing BLE peripheral: {device_name}")
 
@@ -88,6 +90,17 @@ class BLEPeripheral:
         except Exception as e:
             self.log(f"RX error: {e}")
 
+    def tx_read_callback(self):
+        """Called when the client reads the TX characteristic value.
+
+        Returns the last value that was sent, so polling-based clients
+        (like Serial Bluetooth Terminal) can retrieve data without
+        subscribing to notifications.
+        """
+        if self.verbose:
+            self.log("TX read requested by client")
+        return self.last_tx_value
+
     def tx_notify_callback(self, notifying, characteristic):
         """Called when the client subscribes/unsubscribes to TX notifications.
 
@@ -96,27 +109,33 @@ class BLEPeripheral:
             characteristic – the localGATT.Characteristic instance
         """
         self.tx_notifying = notifying
-        self.tx_characteristic = characteristic if notifying else None
-        if self.verbose:
-            self.log(f"TX notifications {'enabled' if notifying else 'disabled'}")
+        # Also update our reference (should already be set from start())
+        if notifying and characteristic is not None:
+            self.tx_characteristic = characteristic
+        self.log(f"TX notifications {'enabled' if notifying else 'disabled'}")
 
     # ── Sending data ──────────────────────────────────────────────────────
 
     def send_notification(self, data: str):
-        """Send data to connected client via TX characteristic notification.
-        
+        """Send data to connected client via TX characteristic.
+
         Each call sends one line.  A newline is appended so the receiving
         app (Serial Bluetooth Terminal or Flutter) can detect line boundaries.
         If the resulting bytes exceed the BLE MTU the payload is chunked.
+
+        The data is sent via set_value() which emits a D-Bus PropertiesChanged
+        signal.  BlueZ will deliver this as a notification to any client that
+        has subscribed (written to the CCCD).  We do NOT gate on tx_notifying
+        because some clients (like Serial Bluetooth Terminal) subscribe at the
+        BlueZ/CCCD level without triggering bluezero's StartNotify callback.
         """
         if not self.is_connected:
             if self.verbose:
                 self.log("Cannot send - no client connected")
             return False
 
-        if not self.tx_notifying or self.tx_characteristic is None:
-            if self.verbose:
-                self.log("Cannot send - client has not subscribed to TX notifications")
+        if self.tx_characteristic is None:
+            self.log("Cannot send - TX characteristic not initialised")
             return False
 
         try:
@@ -126,6 +145,8 @@ class BLEPeripheral:
                 if not data.endswith('\n'):
                     data += '\n'
                 byte_data = list(data.encode('utf-8'))
+                # Keep a copy for read-based polling clients
+                self.last_tx_value = byte_data[:]
                 # BLE has a max MTU, typically 20 bytes for default, up to 512.
                 # Chunk if necessary (most NUS implementations handle up to 240).
                 MAX_CHUNK = 240
@@ -200,9 +221,15 @@ class BLEPeripheral:
                 notifying=False,
                 flags=['notify', 'read'],
                 write_callback=None,
-                read_callback=None,
+                read_callback=self.tx_read_callback,
                 notify_callback=self.tx_notify_callback
             )
+
+            # Grab a reference to the TX characteristic object so we can
+            # call set_value() on it later.  This is the last characteristic
+            # we added, so it is at the end of the list.
+            self.tx_characteristic = self.peripheral_app.characteristics[-1]
+            self.log("TX characteristic reference acquired")
 
             # --- Wire up connect / disconnect callbacks --------------------
             self.peripheral_app.on_connect = self.on_connect
@@ -256,6 +283,10 @@ def stdin_reader(ble_peripheral: BLEPeripheral):
             if line.startswith("TX:"):
                 message = line[3:]
                 ble_peripheral.send_notification(message)
+                # Small delay between successive notifications so BlueZ
+                # doesn't coalesce PropertiesChanged D-Bus signals.
+                import time
+                time.sleep(0.05)
             elif line == "SHUTDOWN":
                 ble_peripheral.log("Received shutdown command")
                 ble_peripheral.stop()
