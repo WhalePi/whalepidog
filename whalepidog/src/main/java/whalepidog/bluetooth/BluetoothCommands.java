@@ -19,8 +19,14 @@ import java.util.function.Consumer;
  * 
  * <p>The Bluetooth server runs in a background thread and automatically handles
  * connection/disconnection cycles.
+ * 
+ * <p><b>Note:</b> This is the legacy Serial Bluetooth implementation (SPP).
+ * For iOS compatibility, use {@link BluetoothBLE} instead.
+ * 
+ * @see BluetoothInterface
+ * @see BluetoothBLE
  */
-public class BluetoothCommands {
+public class BluetoothCommands implements BluetoothInterface {
 
     private static final String PORT_PATH = "/dev/rfcomm0";
     
@@ -51,6 +57,7 @@ public class BluetoothCommands {
      * 
      * @param listener callback for log messages
      */
+    @Override
     public void setLogListener(Consumer<String> listener) {
         this.logListener = listener;
     }
@@ -60,6 +67,7 @@ public class BluetoothCommands {
      * 
      * @param listener callback for received messages
      */
+    @Override
     public void addMessageListener(Consumer<String> listener) {
         if (listener != null) {
             messageListeners.addIfAbsent(listener);
@@ -71,6 +79,7 @@ public class BluetoothCommands {
      * 
      * @param listener the listener to remove
      */
+    @Override
     public void removeMessageListener(Consumer<String> listener) {
         if (listener != null) {
             messageListeners.remove(listener);
@@ -82,6 +91,7 @@ public class BluetoothCommands {
      * 
      * @return true if connected, false otherwise
      */
+    @Override
     public boolean isConnected() {
         return comPort != null && comPort.isOpen();
     }
@@ -90,6 +100,7 @@ public class BluetoothCommands {
      * Start the Bluetooth server in a background thread.
      * The server will run until {@link #stop()} is called.
      */
+    @Override
     public synchronized void start() {
         if (serverRunning) {
             log("Bluetooth server already running");
@@ -105,6 +116,7 @@ public class BluetoothCommands {
     /**
      * Stop the Bluetooth server and clean up resources.
      */
+    @Override
     public synchronized void stop() {
         if (!serverRunning) return;
         
@@ -292,19 +304,26 @@ public class BluetoothCommands {
         try {
             String msg = "ACK: " + command + "\r\n";
             comPort.getOutputStream().write(msg.getBytes());
+            comPort.getOutputStream().flush();
             log("Sent ACK: " + command);
             
             if (response != null && !response.isEmpty()) {
-                String reply = "RPLY: " + response + "\r\n";
-                comPort.getOutputStream().write(reply.getBytes());
-                log("Sent RPLY: " + response.substring(0, Math.min(50, response.length())) + 
-                    (response.length() > 50 ? "..." : ""));
+                // The response (e.g. from "summary") can be multi-line.
+                // Send each line individually with its own \r\n terminator
+                // and flush after each to ensure the serial terminal app
+                // receives every line.
+                String[] lines = response.split("\\r?\\n");
+                for (String line : lines) {
+                    if (!line.isEmpty()) {
+                        String reply = "RPLY: " + line + "\r\n";
+                        comPort.getOutputStream().write(reply.getBytes());
+                        comPort.getOutputStream().flush();
+                    }
+                }
+                log("Sent RPLY: " + lines.length + " line(s) for '" + command + "'");
             } else {
                 log("No response data to send");
             }
-            
-            // Flush to ensure data is sent immediately
-            comPort.getOutputStream().flush();
         } catch (Exception e) {
             logErr("Failed to send response: " + e.getMessage());
             e.printStackTrace();
@@ -315,6 +334,19 @@ public class BluetoothCommands {
 
     private void setupBluetooth() throws IOException, InterruptedException {
         log("Setting up Bluetooth...");
+        
+        // Build the device name from the identification tag
+        String deviceName = "whalepi";
+        String identification = settings.getIdentification();
+        if (identification != null && !identification.trim().isEmpty()) {
+            deviceName = "whalepi_" + identification.trim();
+        }
+        log("Setting Bluetooth device name to: " + deviceName);
+        
+        // Set the Bluetooth system alias (device name)
+        String[] nameCommand = {"sudo", "bluetoothctl", "system-alias", deviceName};
+        Process nameProcess = Runtime.getRuntime().exec(nameCommand);
+        nameProcess.waitFor();
         
         String[] commands = {
             "sudo bluetoothctl power on",

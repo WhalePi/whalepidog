@@ -15,5 +15,11 @@
     "wavFolder": "/home/jdjm/Desktop/pamguard_pi5/PAMRecordings",
     "jre": "java",
     "noGui":false,
-    "mxMemory": 4096
+    "mxMemory": 4096,
+    "bluetoothSettings": {
+        "bluetoothEnabled": false,
+        "bluetoothPairing": true,
+        "verbose": false,
+        "identification": ""
+    }
 }

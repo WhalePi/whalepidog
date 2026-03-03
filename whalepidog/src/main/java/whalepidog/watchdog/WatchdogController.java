@@ -1,6 +1,9 @@
 package whalepidog.watchdog;
 
+import whalepidog.bluetooth.BluetoothInterface;
 import whalepidog.bluetooth.BluetoothCommands;
+import whalepidog.bluetooth.BluetoothBLE;
+import whalepidog.bluetooth.BluetoothSettings;
 import whalepidog.process.PamProcess;
 import whalepidog.settings.SettingsManager;
 import whalepidog.settings.WhalePIDogSettings;
@@ -47,7 +50,7 @@ public class WatchdogController {
     private final File                  settingsFile;
     private final PamProcess            pamProcess;
     private       PamUDP                udp;
-    private       BluetoothCommands     bluetooth;
+    private       BluetoothInterface    bluetooth;
 
     /** Scheduler for health-check and summary polling tasks. */
     private final ScheduledExecutorService scheduler =
@@ -89,6 +92,14 @@ public class WatchdogController {
             log("Watchdog already running – ignoring start()");
             return;
         }
+        
+        try {
+        	//Temporary to allow for debugging
+			Thread.sleep(5000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
         try {
             udp = new PamUDP(settings.getUdpPort());
@@ -101,12 +112,25 @@ public class WatchdogController {
         // Initialize Bluetooth if enabled
         if (settings.getBluetoothSettings().isBluetoothEnabled()) {
             try {
-                bluetooth = new BluetoothCommands(this, settings.getBluetoothSettings());
+                BluetoothSettings btSettings = settings.getBluetoothSettings();
+                
+                log("=== WhalePIDog Bluetooth === " + btSettings.getBluetoothMode());
+
+                // Select Bluetooth implementation based on mode
+                if (btSettings.getBluetoothMode() == BluetoothSettings.BluetoothMode.BLE) {
+                    log("Starting Bluetooth in BLE mode (iOS/Android compatible)");
+                    bluetooth = new BluetoothBLE(this, btSettings);
+                } else {
+                    log("Starting Bluetooth in Serial mode (legacy SPP)");
+                    bluetooth = new BluetoothCommands(this, btSettings);
+                }
+                
                 bluetooth.setLogListener(this::log);
                 bluetooth.start();
-                log("Bluetooth server started");
+                log("Bluetooth server started in " + btSettings.getBluetoothMode() + " mode");
             } catch (Exception e) {
                 log("WARNING: Failed to start Bluetooth server – " + e.getMessage());
+                e.printStackTrace();
                 // Continue anyway – Bluetooth is optional
             }
         }

@@ -18,7 +18,9 @@
   "workingFolder": "",
   "bluetoothSettings": {
     "bluetoothEnabled": false,
+    "bluetoothMode": "BLE",
     "bluetoothPairing": true,
-    "verbose": false
+    "verbose": false,
+    "identification": "X12"
   }
 }
