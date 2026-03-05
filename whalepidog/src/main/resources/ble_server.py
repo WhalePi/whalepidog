@@ -60,17 +60,23 @@ class BLEPeripheral:
 
     # ── GATT callbacks ────────────────────────────────────────────────────
 
-    def on_connect(self):
-        """Called when a client connects"""
+    def on_connect(self, dev=None):
+        """Called when a client connects.
+
+        bluezero passes a device parameter to the connect callback.
+        """
         self.is_connected = True
-        self.log("Client connected")
+        self.log(f"Client connected{f': {dev}' if dev else ''}")
         print("CONNECTED", flush=True)
 
-    def on_disconnect(self):
-        """Called when a client disconnects"""
+    def on_disconnect(self, dev=None):
+        """Called when a client disconnects.
+
+        bluezero passes a device parameter to the disconnect callback.
+        """
         self.is_connected = False
         self.tx_notifying = False
-        self.log("Client disconnected")
+        self.log(f"Client disconnected{f': {dev}' if dev else ''}")
         print("DISCONNECTED", flush=True)
 
     def rx_write_callback(self, value, options):
