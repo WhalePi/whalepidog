@@ -2,6 +2,7 @@ package whalepidog.mainapp;
 
 import whalepidog.settings.SettingsManager;
 import whalepidog.settings.WhalePIDogSettings;
+import whalepidog.test.BluetoothTest;
 import whalepidog.ui.TerminalUI;
 import whalepidog.watchdog.WatchdogController;
 
@@ -49,6 +50,13 @@ public class WhalePIDog {
         System.out.println("║          WhalePIDog  v1.0.0              ║");
         System.out.println("║  PAMGuard Watchdog for Raspberry Pi      ║");
         System.out.println("╚══════════════════════════════════════════╝");
+
+        // ── 0. Check for --bletest mode ──────────────────────────────────────
+        if (args.length >= 1 && args[0].equals("--bletest")) {
+            String deviceName = (args.length >= 2) ? args[1] : "whalepi";
+            BluetoothTest.run(deviceName);
+            return; // never reached — BluetoothTest.run() blocks
+        }
 
         // ── 1. Resolve settings file ─────────────────────────────────────────
         File settingsFile;
