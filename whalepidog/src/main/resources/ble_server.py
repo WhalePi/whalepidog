@@ -155,7 +155,7 @@ class BLEPeripheral:
                 self.last_tx_value = byte_data[:]
                 # BLE has a max MTU, typically 20 bytes for default, up to 512.
                 # Chunk if necessary (most NUS implementations handle up to 240).
-                MAX_CHUNK = 240
+                MAX_CHUNK = 182
                 for i in range(0, len(byte_data), MAX_CHUNK):
                     chunk = byte_data[i:i + MAX_CHUNK]
                     self.tx_characteristic.set_value(chunk)
