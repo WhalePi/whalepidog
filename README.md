@@ -1,6 +1,6 @@
 # WhalePiDog
 
-A terminal-based watchdog for [PAMGuard](https://www.pamguard.org/) designed to run on a Raspberry Pi. WhalePiDog launches PAMGuard as a headless subprocess, monitors its health over UDP, automatically restarts it if it stops responding, and provides a live terminal UI for status and control.
+A terminal-based watchdog for [PAMGuard](https://www.pamguard.org/) designed to run on a Raspberry Pi. WhalePiDog launches PAMGuard as a headless subprocess, monitors its health over UDP, connects via Bluetooth to peripherals, automatically restarts it if it stops responding, and provides a live terminal UI for status and control.
 
 ---
 
@@ -14,6 +14,7 @@ A terminal-based watchdog for [PAMGuard](https://www.pamguard.org/) designed to 
   - **Log** – live PAMGuard stdout/stderr output
 - **Command mode** – interactive prompt (`:`), with quick-send key shortcuts for common commands
 - **Deploy mode** – optionally sends the `start` command automatically after PAMGuard initialises, for unattended deployment
+- **Bluetooth communication** – handles Bluetooth commands e.g. sent via a phone app such as [BlueToothSerial app](https://play.google.com/store/apps/details?id=de.kai_morich.serial_bluetooth_terminal&hl=en_GB). 
 
 ---
 
