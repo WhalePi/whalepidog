@@ -324,8 +324,15 @@ public class BluetoothBLE implements BluetoothInterface {
         try {
             log("Processing command: '" + command + "'");
             
-            // Send to watchdog controller
-            String response = watchdog.sendCommandAndUpdate(command, 5000);
+            String response;
+            if (command.equalsIgnoreCase("status")) {
+                // For Bluetooth, return an XML status message with watchdog info
+                response = watchdog.getBluetoothStatusXml(5000);
+                log("Built XML status response for BLE client");
+            } else {
+                // Send to watchdog controller
+                response = watchdog.sendCommandAndUpdate(command, 5000);
+            }
             
             log("Response from PAMGuard: " + (response != null ? "'" + response + "'" : "null"));
             

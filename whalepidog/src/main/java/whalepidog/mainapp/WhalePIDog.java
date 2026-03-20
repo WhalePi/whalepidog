@@ -33,6 +33,7 @@ import java.io.File;
  *   "msMemory"               : 2048,
  *   "otherVMOptions"         : "",
  *   "otherOptions"           : "",
+ *   "soundCardName"          : "",
  *   "deploy"                 : true,
  *   "udpPort"                : 8000,
  *   "checkIntervalSeconds"   : 30,

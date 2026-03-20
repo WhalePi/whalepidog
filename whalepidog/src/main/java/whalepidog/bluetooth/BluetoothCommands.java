@@ -281,8 +281,15 @@ public class BluetoothCommands implements BluetoothInterface {
         try {
             log("Processing command: '" + command + "' (length=" + command.length() + ")");
             
-            // Send the command to the watchdog controller
-            String response = watchdog.sendCommandAndUpdate(command, 5000);
+            String response;
+            if (command.equalsIgnoreCase("status")) {
+                // For Bluetooth, return an XML status message with watchdog info
+                response = watchdog.getBluetoothStatusXml(5000);
+                log("Built XML status response for Bluetooth client");
+            } else {
+                // Send the command to the watchdog controller
+                response = watchdog.sendCommandAndUpdate(command, 5000);
+            }
             
             log("Response from PAMGuard: " + (response != null ? "'" + response + "'" : "null"));
             

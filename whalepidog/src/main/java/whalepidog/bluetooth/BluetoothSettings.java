@@ -62,8 +62,17 @@ public class BluetoothSettings {
         return bluetoothMode;
     }
 
-    public void setBluetoothMode(BluetoothMode bluetoothMode) {
-        this.bluetoothMode = bluetoothMode;
+    public void setBluetoothMode(String string) {
+    	switch (string.toUpperCase()) {
+			case "SERIAL":
+				this.bluetoothMode = BluetoothMode.SERIAL;
+				break;
+			case "BLE":
+				this.bluetoothMode = BluetoothMode.BLE;
+				break;
+			default:
+				throw new IllegalArgumentException("Invalid Bluetooth mode: " + string);
+		}
     }
 
     public boolean isBluetoothPairing() {

@@ -383,6 +383,76 @@ public class WatchdogController {
     public PamProcess getPamProcess(){ return pamProcess; }
     public boolean isBluetoothConnected() { return bluetooth != null && bluetooth.isConnected(); }
 
+    /**
+     * Build an XML status message for Bluetooth clients.
+     *
+     * <p>This is used exclusively by the Bluetooth command handlers so that
+     * a "status" request over Bluetooth returns richer information than the
+     * plain UDP status code.
+     *
+     * <p>The returned XML looks like:
+     * <pre>{@code
+     * <whalepidogStatus>
+     *   <pamguardStatus code="1">RUNNING</pamguardStatus>
+     *   <watchdog>
+     *     <state>RUNNING</state>
+     *     <restarts>2</restarts>
+     *     <uptimeSeconds>3600</uptimeSeconds>
+     *     <uptimeFormatted>1h 0m 0s</uptimeFormatted>
+     *     <startTime>2026-03-14 10:00:00</startTime>
+     *   </watchdog>
+     * </whalepidogStatus>
+     * }</pre>
+     *
+     * @param timeoutMs timeout for the UDP status query to PAMGuard
+     * @return the XML status string
+     */
+    public String getBluetoothStatusXml(int timeoutMs) {
+        // Query PAMGuard for the current status via the normal path
+        String rawResponse = sendCommandAndUpdate(PamUDP.CMD_STATUS, timeoutMs);
+        int statusCode = pamStatus.get();
+        String statusLabel = statusName(statusCode);
+
+        long uptimeMs = System.currentTimeMillis() - startTime.get();
+        long uptimeSec = uptimeMs / 1000;
+        String uptimeFormatted = formatUptime(uptimeSec);
+        String startTimeStr = startTime.get() > 0
+                ? TS_FMT.format(Instant.ofEpochMilli(startTime.get()))
+                : "N/A";
+
+        StringBuilder xml = new StringBuilder();
+        xml.append("<whalepidogStatus>\n");
+        xml.append("  <pamguardStatus code=\"").append(statusCode).append("\">")
+           .append(statusLabel).append("</pamguardStatus>\n");
+        xml.append("  <watchdog>\n");
+        xml.append("    <state>").append(state.get()).append("</state>\n");
+        xml.append("    <restarts>").append(restartCount.get()).append("</restarts>\n");
+        xml.append("    <uptimeSeconds>").append(uptimeSec).append("</uptimeSeconds>\n");
+        xml.append("    <uptimeFormatted>").append(uptimeFormatted).append("</uptimeFormatted>\n");
+        xml.append("    <startTime>").append(startTimeStr).append("</startTime>\n");
+        xml.append("  </watchdog>\n");
+        xml.append("</whalepidogStatus>");
+
+        return xml.toString();
+    }
+
+    /**
+     * Format a duration in seconds to a human-readable string like "2h 15m 30s".
+     */
+    private static String formatUptime(long totalSeconds) {
+        long days    = totalSeconds / 86400;
+        long hours   = (totalSeconds % 86400) / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+
+        StringBuilder sb = new StringBuilder();
+        if (days > 0)    sb.append(days).append("d ");
+        if (hours > 0)   sb.append(hours).append("h ");
+        if (minutes > 0) sb.append(minutes).append("m ");
+        sb.append(seconds).append("s");
+        return sb.toString();
+    }
+
     public void setStateListener(Consumer<State>  l) { this.stateListener = l; }
     public void setLogListener  (Consumer<String> l) {
         this.logListener = l;

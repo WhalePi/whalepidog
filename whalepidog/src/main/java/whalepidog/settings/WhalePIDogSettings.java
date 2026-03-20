@@ -41,6 +41,21 @@ public class WhalePIDogSettings {
     private String otherOptions = "";
 
     /**
+     * Name of the sound card PAMGuard should use ({@code -scname} option).
+     * If blank or {@code null}, the {@code -scname} flag is omitted and
+     * PAMGuard will use its default sound card selection.
+     * Example: {@code "COSMOS_1_ADC"}.
+     */
+    private String soundCardName = "";
+
+    /**
+     * Recording filename prefix passed to PAMGuard via the {@code -recording.Prefix} argument.
+     * If blank or {@code null}, the argument is omitted and PAMGuard uses its default prefix.
+     * Example: {@code "PAMA1"} produces {@code -recording.Prefix "PAMA1"}.
+     */
+    private String recordingPrefix = "";
+
+    /**
      * If {@code true}, PAMGuard is launched with {@code -nogui} so it runs
      * headless.  Set to {@code false} to allow the PAMGuard GUI to open.
      * Default: {@code true}.
@@ -121,6 +136,12 @@ public class WhalePIDogSettings {
     public String getOtherOptions() { return otherOptions == null ? "" : otherOptions; }
     public void setOtherOptions(String otherOptions) { this.otherOptions = otherOptions; }
 
+    public String getSoundCardName() { return soundCardName == null ? "" : soundCardName; }
+    public void setSoundCardName(String soundCardName) { this.soundCardName = soundCardName; }
+
+    public String getRecordingPrefix() { return recordingPrefix == null ? "" : recordingPrefix; }
+    public void setRecordingPrefix(String recordingPrefix) { this.recordingPrefix = recordingPrefix; }
+
     public boolean isNoGui() { return noGui; }
     public void setNoGui(boolean noGui) { this.noGui = noGui; }
 
@@ -159,6 +180,8 @@ public class WhalePIDogSettings {
                 ", mxMemory=" + mxMemory +
                 ", deploy=" + deploy +
                 ", noGui=" + noGui +
+                ", soundCardName='" + soundCardName + '\'' +
+                ", recordingPrefix='" + recordingPrefix + '\'' +
                 ", udpPort=" + udpPort +
                 ", deploy=" + deploy +
                 ", checkIntervalSeconds=" + checkIntervalSeconds +

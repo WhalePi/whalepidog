@@ -24,6 +24,8 @@ import whalepidog.bluetooth.BluetoothSettings;
  *   "msMemory"               : 2048,
  *   "otherVMOptions"         : "",
  *   "otherOptions"           : "",
+ *   "soundCardName"          : "",
+ *   "recordingPrefix"        : "",
  *   "deploy"                 : true,
  *   "udpPort"                : 8000,
  *   "checkIntervalSeconds"   : 30,
@@ -64,6 +66,8 @@ public class SettingsManager {
             if (jo.has("msMemory"))                                                       s.setMsMemory(jo.getInt("msMemory"));
             if (jo.has("otherVMOptions")         && !jo.isNull("otherVMOptions"))         s.setOtherVMOptions(jo.getString("otherVMOptions"));
             if (jo.has("otherOptions")           && !jo.isNull("otherOptions"))           s.setOtherOptions(jo.getString("otherOptions"));
+            if (jo.has("soundCardName")          && !jo.isNull("soundCardName"))          s.setSoundCardName(jo.getString("soundCardName"));
+            if (jo.has("recordingPrefix")        && !jo.isNull("recordingPrefix"))        s.setRecordingPrefix(jo.getString("recordingPrefix"));
             if (jo.has("deploy"))                                                         s.setDeploy(jo.getBoolean("deploy"));
             if (jo.has("noGui"))                                                          s.setNoGui(jo.getBoolean("noGui"));
             if (jo.has("udpPort"))                                                        s.setUdpPort(jo.getInt("udpPort"));
@@ -79,6 +83,9 @@ public class SettingsManager {
                 if (btJson.has("bluetoothEnabled"))  bt.setBluetoothEnabled(btJson.getBoolean("bluetoothEnabled"));
                 if (btJson.has("bluetoothPairing"))  bt.setBluetoothPairing(btJson.getBoolean("bluetoothPairing"));
                 if (btJson.has("verbose"))           bt.setVerbose(btJson.getBoolean("verbose"));
+                if (btJson.has("identification"))    bt.setIdentification(btJson.getString("identification"));
+                if (btJson.has("bluetoothMode"))   	 bt.setBluetoothMode(btJson.getString("bluetoothMode"));
+
                 s.setBluetoothSettings(bt);
             }
 
@@ -110,6 +117,8 @@ public class SettingsManager {
         jo.put("msMemory",               settings.getMsMemory());
         jo.put("otherVMOptions",         settings.getOtherVMOptions());
         jo.put("otherOptions",           settings.getOtherOptions());
+        jo.put("soundCardName",          settings.getSoundCardName());
+        jo.put("recordingPrefix",        settings.getRecordingPrefix());
         jo.put("deploy",                 settings.isDeploy());
         jo.put("noGui",                  settings.isNoGui());
         jo.put("udpPort",                settings.getUdpPort());
@@ -124,6 +133,10 @@ public class SettingsManager {
             btJson.put("bluetoothEnabled", settings.getBluetoothSettings().isBluetoothEnabled());
             btJson.put("bluetoothPairing", settings.getBluetoothSettings().isBluetoothPairing());
             btJson.put("verbose",          settings.getBluetoothSettings().isVerbose());
+            btJson.put("identification",   settings.getBluetoothSettings().getIdentification());
+            btJson.put("bluetoothMode",    settings.getBluetoothSettings().getBluetoothMode().toString());
+
+            
             jo.put("bluetoothSettings", btJson);
         }
 

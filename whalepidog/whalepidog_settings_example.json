@@ -1,4 +1,5 @@
 {
+  "daemon": false,
   "pamguardJar": "/home/jdjm/Desktop/pamguard_pi5/Pamguard-2.02.18.jar",
   "psfxFile": "/home/jdjm/Desktop/pamguard_pi5/pamguard_pi5.psfx",
   "wavFolder": "/home/jdjm/Desktop/pamguard_pi5/PAMRecordings",

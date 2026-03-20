@@ -170,6 +170,11 @@ public class PamProcess {
         if (db != null && !db.isBlank())
             sb.append(" -databasefile \"").append(db).append('"');
 
+        // Sound card name – tells PAMGuard which sound card to use
+        String scName = settings.getSoundCardName();
+        if (scName != null && !scName.isBlank())
+            sb.append(" -scname \"").append(scName).append('"');
+
         // nogui flag – only set if running headless
         if (settings.isNoGui())
             sb.append(" -nogui");
