@@ -1,5 +1,7 @@
 package whalepidog.ui;
 
+import whalepidog.process.CopyDataTask;
+import whalepidog.process.CopyDataTask.ExternalVolume;
 import whalepidog.settings.WhalePIDogSettings;
 import whalepidog.udp.PamUDP;
 import whalepidog.watchdog.WatchdogController;
@@ -8,6 +10,8 @@ import whalepidog.watchdog.WatchdogController.State;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -20,6 +24,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Terminal-based user interface for WhalePIDog.
@@ -242,7 +247,7 @@ public class TerminalUI {
         sb.append("\n");
         sb.append(ANSI_BOLD).append("--- Controls ---").append(ANSI_RESET).append("\n");
         sb.append("  [:] Command  [s] Summary View  [t] Summary Text  [l] Log  [q] Quit  [h] Help\n");
-        sb.append("  [1] ping  [2] Status  [3] summary  [4] start  [5] stop\n");
+        sb.append("  [1] ping  [2] Status  [3] summary  [4] start  [5] stop  [copydata] Copy to USB\n");
 
         // Erase leftover lines from any previous (taller) frame, then restore cursor.
         sb.append(ANSI_ERASE_DOWN).append(ANSI_SHOW_CUR);
@@ -321,6 +326,180 @@ public class TerminalUI {
         if      (priorMode == DisplayMode.SUMMARY_VIEW) switchToSummaryView();
         else if (priorMode == DisplayMode.SUMMARY_TEXT) switchToSummaryText();
         else                                             switchToLog();
+    }
+
+    // ── COPY DATA mode ───────────────────────────────────────────────────────
+
+    /**
+     * Interactive flow for the {@code copydata} command.
+     *
+     * <ol>
+     *   <li>Check PAMGuard is not running – if it is, tell the user to stop first.</li>
+     *   <li>List mounted external volumes.</li>
+     *   <li>Prompt the user to select a volume by number.</li>
+     *   <li>Validate free space, then copy the wavFolder contents with progress.</li>
+     * </ol>
+     */
+    private void enterCopyDataMode() {
+        priorMode = mode.get();
+        mode.set(DisplayMode.COMMAND);   // suppress scheduled renders
+
+        synchronized (renderLock) {
+            System.out.println();
+            System.out.println(ANSI_BOLD + ANSI_CYAN + "--- Copy Data ---" + ANSI_RESET);
+        }
+
+        // 1. Check PAMGuard is not actively processing data
+        if (watchdog.getPamProcess().isAlive() && watchdog.getPamStatus() == PamUDP.PAM_RUNNING) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "PAMGuard is currently processing data. Please stop PAMGuard first "
+                        + "(press 5 or type 'stop')." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromCopyData();
+            return;
+        }
+
+        // 2. Validate source folder
+        String wavFolder = settings.getWavFolder();
+        if (wavFolder == null || wavFolder.isBlank()) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "No wavFolder configured in settings." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromCopyData();
+            return;
+        }
+        Path sourcePath = Path.of(wavFolder);
+        if (!Files.isDirectory(sourcePath)) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "wavFolder does not exist: " + wavFolder + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromCopyData();
+            return;
+        }
+
+        // 3. List volumes
+        List<ExternalVolume> volumes = CopyDataTask.listExternalVolumes();
+        if (volumes.isEmpty()) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_YELLOW + "No external storage drives detected." + ANSI_RESET);
+                System.out.println(ANSI_DIM + "Attach a USB drive and try again." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromCopyData();
+            return;
+        }
+
+        synchronized (renderLock) {
+            System.out.println();
+            System.out.println(ANSI_BOLD + "Available volumes:" + ANSI_RESET);
+            for (int i = 0; i < volumes.size(); i++) {
+                System.out.printf("  %s%d%s  %s%n",
+                        ANSI_BOLD + ANSI_CYAN, i + 1, ANSI_RESET,
+                        volumes.get(i).toDisplayString());
+            }
+            System.out.println();
+            System.out.println(ANSI_DIM + "Enter the volume number to copy to, or 'back' to cancel." + ANSI_RESET);
+            System.out.flush();
+        }
+
+        // 4. Prompt for selection
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        ExternalVolume selected = null;
+        while (selected == null) {
+            System.out.print(ANSI_BOLD + ANSI_CYAN + "Volume> " + ANSI_RESET);
+            System.out.flush();
+            try {
+                String input = br.readLine();
+                if (input == null) break;
+                input = input.trim();
+                if (input.isEmpty() || input.equalsIgnoreCase("back")) break;
+                try {
+                    int idx = Integer.parseInt(input) - 1;
+                    if (idx >= 0 && idx < volumes.size()) {
+                        selected = volumes.get(idx);
+                    } else {
+                        System.out.println(ANSI_RED + "Invalid selection. Enter 1-" + volumes.size() + ANSI_RESET);
+                    }
+                } catch (NumberFormatException e) {
+                    System.out.println(ANSI_RED + "Enter a number (1-" + volumes.size() + ") or 'back'." + ANSI_RESET);
+                }
+            } catch (IOException e) { break; }
+        }
+
+        if (selected == null) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_YELLOW + "Copy cancelled." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromCopyData();
+            return;
+        }
+
+        // 5. Validate space
+        // Progress callback prints to both stdout and Bluetooth
+        Consumer<String> progressCb = msg -> {
+            synchronized (renderLock) {
+                System.out.println(ANSI_GREEN + "[CopyData] " + ANSI_RESET + msg);
+                System.out.flush();
+            }
+            broadcastBluetoothProgress(msg);
+        };
+
+        CopyDataTask task = new CopyDataTask(sourcePath, progressCb);
+        String spaceError = task.validateSpace(selected);
+        if (spaceError != null) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + spaceError + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromCopyData();
+            return;
+        }
+
+        // 6. Copy (runs on this thread – blocks the input loop, which is fine)
+        synchronized (renderLock) {
+            System.out.println(ANSI_BOLD + "Starting copy to: " + selected.getMountPoint() + ANSI_RESET);
+            System.out.flush();
+        }
+
+        boolean ok = task.copy(selected);
+        synchronized (renderLock) {
+            if (ok) {
+                System.out.println(ANSI_GREEN + ANSI_BOLD + "Copy completed successfully." + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_RED + ANSI_BOLD + "Copy failed." + ANSI_RESET);
+            }
+            System.out.println();
+            System.out.flush();
+        }
+
+        returnFromCopyData();
+    }
+
+    private void returnFromCopyData() {
+        mode.set(priorMode);
+        if      (priorMode == DisplayMode.SUMMARY_VIEW) switchToSummaryView();
+        else if (priorMode == DisplayMode.SUMMARY_TEXT) switchToSummaryText();
+        else                                             switchToLog();
+    }
+
+    /**
+     * Send a progress message to the Bluetooth interface (if connected).
+     * This is a best-effort operation – errors are silently ignored.
+     */
+    private void broadcastBluetoothProgress(String message) {
+        // The watchdog exposes a method to send BLE notifications.
+        // We piggy-back on it via the log listener mechanism if available.
+        watchdog.broadcastCopyProgress(message);
     }
 
     private void sendAndDisplay(String command) {
@@ -403,6 +582,7 @@ public class TerminalUI {
             case "3"  -> quickSend(PamUDP.CMD_SUMMARY);
             case "4"  -> quickSend(PamUDP.CMD_START);
             case "5"  -> quickSend(PamUDP.CMD_STOP);
+            case "copydata" -> enterCopyDataMode();
             default -> {
                 for (String cmd : KNOWN_COMMANDS) {
                     if (raw.equalsIgnoreCase(cmd)) { quickSend(cmd); return; }
@@ -545,6 +725,10 @@ public class TerminalUI {
                 System.out.println("    Type any UDP command and press Enter.");
                 System.out.println("    Known: ping  Status  summary  start  stop  Exit");
                 System.out.println("    Empty line or 'back' returns to the previous view.");
+                System.out.println();
+                System.out.println("  Data management:");
+                System.out.println("    copydata  - Copy wavFolder to an external USB drive");
+                System.out.println("                (PAMGuard must be stopped first)");
                 System.out.println();
                 System.out.println("  q  - Quit    h  - Help");
                 System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);

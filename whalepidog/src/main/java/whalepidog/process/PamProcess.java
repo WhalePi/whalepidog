@@ -175,6 +175,11 @@ public class PamProcess {
         if (scName != null && !scName.isBlank())
             sb.append(" -scname \"").append(scName).append('"');
 
+        // Recording filename prefix
+        String recPrefix = settings.getRecordingPrefix();
+        if (recPrefix != null && !recPrefix.isBlank())
+            sb.append(" -recording.Prefix \"").append(recPrefix).append('"');
+
         // nogui flag – only set if running headless
         if (settings.isNoGui())
             sb.append(" -nogui");

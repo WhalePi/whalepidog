@@ -139,6 +139,18 @@ public class BluetoothCommands implements BluetoothInterface {
         }
     }
 
+    @Override
+    public void sendCopyProgress(String message) {
+        if (comPort == null || !comPort.isOpen()) return;
+        try {
+            String msg = "COPY: " + message + "\r\n";
+            comPort.getOutputStream().write(msg.getBytes());
+            comPort.getOutputStream().flush();
+        } catch (Exception e) {
+            logErr("Failed to send copy progress: " + e.getMessage());
+        }
+    }
+
     // ── Server loop ──────────────────────────────────────────────────────────
 
     private void runServer() {
@@ -281,6 +293,13 @@ public class BluetoothCommands implements BluetoothInterface {
         try {
             log("Processing command: '" + command + "' (length=" + command.length() + ")");
             
+            // Handle copydata commands locally (not a PAMGuard UDP command)
+            if (command.toLowerCase().startsWith("copydata")) {
+                String response = CopyDataHandler.handle(command, watchdog, this::sendCopyProgress);
+                sendResponse(command, response);
+                return;
+            }
+
             String response;
             if (command.equalsIgnoreCase("status")) {
                 // For Bluetooth, return an XML status message with watchdog info

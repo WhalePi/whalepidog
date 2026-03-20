@@ -119,6 +119,19 @@ public class BluetoothBLE implements BluetoothInterface {
         cleanup();
     }
 
+    @Override
+    public void sendCopyProgress(String message) {
+        if (!isConnected || processWriter == null) return;
+        connectionLock.lock();
+        try {
+            sendToPython("COPY: " + message);
+        } catch (Exception e) {
+            logErr("Failed to send copy progress: " + e.getMessage());
+        } finally {
+            connectionLock.unlock();
+        }
+    }
+
     // ── BLE Server ───────────────────────────────────────────────────────────
 
     private void runServer() {
@@ -324,6 +337,13 @@ public class BluetoothBLE implements BluetoothInterface {
         try {
             log("Processing command: '" + command + "'");
             
+            // Handle copydata commands locally (not a PAMGuard UDP command)
+            if (command.toLowerCase().startsWith("copydata")) {
+                String response = CopyDataHandler.handle(command, watchdog, this::sendCopyProgress);
+                sendResponse(command, response);
+                return;
+            }
+
             String response;
             if (command.equalsIgnoreCase("status")) {
                 // For Bluetooth, return an XML status message with watchdog info

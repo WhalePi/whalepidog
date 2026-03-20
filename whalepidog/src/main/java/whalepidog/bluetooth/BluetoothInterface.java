@@ -47,4 +47,16 @@ public interface BluetoothInterface {
      * Stop the Bluetooth server and clean up resources.
      */
     void stop();
+
+    /**
+     * Send a copy-progress message to the connected Bluetooth client.
+     * Implementations should send the message as a notification / serial line
+     * prefixed with {@code COPY:}.  If no client is connected the message is
+     * silently discarded.
+     *
+     * @param message human-readable progress text
+     */
+    default void sendCopyProgress(String message) {
+        // Default no-op – implementations override as needed.
+    }
 }

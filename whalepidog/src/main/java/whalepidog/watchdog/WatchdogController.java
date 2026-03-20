@@ -382,6 +382,22 @@ public class WatchdogController {
     public long   getStartTime()     { return startTime.get(); }
     public PamProcess getPamProcess(){ return pamProcess; }
     public boolean isBluetoothConnected() { return bluetooth != null && bluetooth.isConnected(); }
+    public WhalePIDogSettings getSettings() { return settings; }
+
+    /**
+     * Send a copy-progress message to the connected Bluetooth client (if any).
+     * Called by the terminal UI during a {@code copydata} operation so that
+     * Bluetooth-connected users also see progress updates.
+     *
+     * @param message human-readable progress text
+     */
+    public void broadcastCopyProgress(String message) {
+        if (bluetooth != null && bluetooth.isConnected()) {
+            try {
+                bluetooth.sendCopyProgress(message);
+            } catch (Exception ignored) {}
+        }
+    }
 
     /**
      * Build an XML status message for Bluetooth clients.
