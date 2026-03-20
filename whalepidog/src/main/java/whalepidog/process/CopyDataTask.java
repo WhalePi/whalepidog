@@ -76,17 +76,21 @@ public class CopyDataTask {
     // ── Fields ───────────────────────────────────────────────────────────────
 
     private final Path             sourceFolder;
+    private final Path             databaseFile;
     private final Consumer<String> progressListener;
     private final AtomicBoolean    cancelled = new AtomicBoolean(false);
 
     /**
      * @param sourceFolder     the directory whose contents should be copied
      *                         (typically the {@code wavFolder} from settings)
+     * @param databaseFile     optional path to the database file to copy alongside
+     *                         the wav folder; may be {@code null}
      * @param progressListener callback that receives human-readable progress
      *                         messages; may be {@code null}
      */
-    public CopyDataTask(Path sourceFolder, Consumer<String> progressListener) {
+    public CopyDataTask(Path sourceFolder, Path databaseFile, Consumer<String> progressListener) {
         this.sourceFolder     = sourceFolder;
+        this.databaseFile     = databaseFile;
         this.progressListener = progressListener != null ? progressListener : s -> {};
     }
 
@@ -163,6 +167,12 @@ public class CopyDataTask {
         long needed = directorySize(sourceFolder);
         if (needed < 0) {
             return "Cannot calculate size of source folder: " + sourceFolder;
+        }
+        // Include the database file size if present
+        if (databaseFile != null && Files.isRegularFile(databaseFile)) {
+            try {
+                needed += Files.size(databaseFile);
+            } catch (IOException ignored) {}
         }
         long free = volume.getFreeBytes();
         // Re-check free space from the filesystem in case lsblk data is stale
@@ -269,6 +279,21 @@ public class CopyDataTask {
         if (cancelled.get()) {
             progress("Copy CANCELLED by user.");
             return false;
+        }
+
+        // Copy the database file if configured
+        if (databaseFile != null && Files.isRegularFile(databaseFile)) {
+            Path dbTarget = Path.of(volume.getMountPoint(), databaseFile.getFileName().toString());
+            progress("Copying database " + databaseFile.getFileName() + " → " + dbTarget);
+            try {
+                Files.copy(databaseFile, dbTarget, StandardCopyOption.REPLACE_EXISTING);
+                long dbSize = Files.size(databaseFile);
+                copiedBytes.addAndGet(dbSize);
+                fileCount.incrementAndGet();
+                progress("Database copied: " + humanSize(dbSize));
+            } catch (IOException e) {
+                progress("WARNING: Failed to copy database file: " + e.getMessage());
+            }
         }
 
         long elapsedSec = (System.currentTimeMillis() - startMs) / 1000;

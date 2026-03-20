@@ -453,7 +453,11 @@ public class TerminalUI {
             broadcastBluetoothProgress(msg);
         };
 
-        CopyDataTask task = new CopyDataTask(sourcePath, progressCb);
+        // Resolve optional database file
+        String dbSetting = settings.getDatabase();
+        Path dbPath = (dbSetting != null && !dbSetting.isBlank()) ? Path.of(dbSetting) : null;
+
+        CopyDataTask task = new CopyDataTask(sourcePath, dbPath, progressCb);
         String spaceError = task.validateSpace(selected);
         if (spaceError != null) {
             synchronized (renderLock) {

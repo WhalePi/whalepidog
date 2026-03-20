@@ -90,7 +90,10 @@ public class CopyDataHandler {
         ExternalVolume target = volumes.get(selection - 1);
 
         // 4. Validate space
-        CopyDataTask task = new CopyDataTask(sourcePath, progress);
+        String dbSetting = settings.getDatabase();
+        Path dbPath = (dbSetting != null && !dbSetting.isBlank()) ? Path.of(dbSetting) : null;
+
+        CopyDataTask task = new CopyDataTask(sourcePath, dbPath, progress);
         String spaceError = task.validateSpace(target);
         if (spaceError != null) {
             return "ERROR: " + spaceError;
