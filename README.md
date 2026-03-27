@@ -79,37 +79,75 @@ Settings are stored in a JSON file. All fields are optional — defaults are sho
   "msMemory"               : 2048,
   "otherVMOptions"         : "",
   "otherOptions"           : "",
+  "soundCardName"          : "",
+  "recordingPrefix"        : "",
   "noGui"                  : true,
   "deploy"                 : true,
   "udpPort"                : 8000,
   "checkIntervalSeconds"   : 30,
   "summaryIntervalSeconds" : 5,
   "startWaitSeconds"       : 10,
-  "workingFolder"          : ""
+  "workingFolder"          : "",
+  "bluetoothSettings"      : {
+    "bluetoothEnabled"  : false,
+    "bluetoothMode"     : "BLE",
+    "bluetoothPairing"  : true,
+    "verbose"           : false,
+    "identification"    : ""
+  }
 }
 ```
 
+### PAMGuard Launch Parameters
+
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `pamguardJar` | string | `""` | **Required.** Path to the PAMGuard `.jar` file |
-| `psfxFile` | string | `""` | PAMGuard settings file (`-psf`) |
-| `wavFolder` | string | `""` | Recording output folder (`-wavfolder`) |
-| `database` | string | `""` | SQLite database path (`-database`) |
-| `libFolder` | string | `"lib64"` | Native library path (`-Djava.library.path`) |
-| `jre` | string | `"java"` | Java executable (full path or on `PATH`) |
-| `mxMemory` | int | `4096` | Max JVM heap in MB (`-Xmx`) |
-| `msMemory` | int | `2048` | Initial JVM heap in MB (`-Xms`) |
-| `otherVMOptions` | string | `""` | Extra JVM flags inserted before `-jar` |
-| `otherOptions` | string | `""` | Extra PAMGuard command-line options |
-| `noGui` | bool | `true` | Pass `-nogui` to PAMGuard for headless operation |
-| `deploy` | bool | `true` | Send `start` automatically after initialisation |
-| `udpPort` | int | `8000` | UDP port PAMGuard listens on |
-| `checkIntervalSeconds` | int | `30` | Health-check interval (ping + status) |
-| `summaryIntervalSeconds` | int | `5` | Summary fetch and UI refresh interval |
-| `startWaitSeconds` | int | `10` | Seconds to wait for PAMGuard to initialise before the first ping |
-| `workingFolder` | string | `""` | Working directory for the PAMGuard process; defaults to the jar's directory |
+| `pamguardJar` | string | `""` | **Required.** Absolute path to the PAMGuard `.jar` file. |
+| `psfxFile` | string | `""` | Path to the PAMGuard settings file (`.psfx`), passed via the `-psf` flag. |
+| `wavFolder` | string | `""` | Path to the recordings/WAV-file output folder, passed via `-wavfolder`. |
+| `database` | string | `""` | Path to the SQLite database file, passed via `-database`. |
+| `libFolder` | string | `"lib64"` | Path to the native library folder, set via `-Djava.library.path`. |
+| `jre` | string | `"java"` | Java executable to use when launching PAMGuard. Can be a full path or a command on `PATH`. |
+| `mxMemory` | int | `4096` | Maximum JVM heap size in megabytes (`-Xmx`). |
+| `msMemory` | int | `2048` | Initial/minimum JVM heap size in megabytes (`-Xms`). |
+| `otherVMOptions` | string | `""` | Extra JVM flags inserted before `-jar` (e.g. `"-Dname=AutoPamguard"`). |
+| `otherOptions` | string | `""` | Extra PAMGuard command-line options appended after the standard flags. |
+| `soundCardName` | string | `""` | Name of the sound card PAMGuard should use, passed via `-scname`. If blank, the flag is omitted and PAMGuard uses its default sound card (e.g. `"COSMOS_1_ADC"`). |
+| `recordingPrefix` | string | `""` | Recording filename prefix passed via `-recording.Prefix`. If blank, the argument is omitted and PAMGuard uses its default prefix (e.g. `"PAMA1"` produces `-recording.Prefix "PAMA1"`). |
+| `noGui` | bool | `true` | If `true`, launches PAMGuard with `-nogui` for headless operation. Set to `false` to allow the PAMGuard GUI to open. |
+| `deploy` | bool | `true` | If `true`, sends the `start` command to PAMGuard automatically after it initialises, so it begins acquiring/processing data. If `false`, PAMGuard is launched but left in idle mode. |
 
----
+### UDP Communication
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `udpPort` | int | `8000` | UDP port that PAMGuard is listening on. Must match the port configured in your PAMGuard `.psfx` file. |
+
+### Watchdog Timing
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `checkIntervalSeconds` | int | `30` | Interval in seconds between watchdog health checks (ping + status request). |
+| `summaryIntervalSeconds` | int | `5` | Interval in seconds between summary fetches and terminal UI refreshes. |
+| `startWaitSeconds` | int | `10` | Seconds to wait after PAMGuard launches before sending the first health-check ping. Allows time for PAMGuard to initialise. |
+
+### Miscellaneous
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `workingFolder` | string | `""` | Working directory for the PAMGuard process. If empty or omitted, defaults to the directory containing `pamguardJar`. |
+
+### Bluetooth Settings (`bluetoothSettings`)
+
+The `bluetoothSettings` key holds a nested object controlling Bluetooth communication with WhalePiDog (e.g. via a phone app).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `bluetoothEnabled` | bool | `false` | Enables or disables Bluetooth functionality entirely. |
+| `bluetoothMode` | string | `"BLE"` | Bluetooth protocol mode. `"BLE"` uses Bluetooth Low Energy (compatible with iOS and Android apps). `"SERIAL"` uses legacy Serial Bluetooth (SPP), compatible with Serial Bluetooth Terminal apps. |
+| `bluetoothPairing` | bool | `true` | If `true`, WhalePiDog will initiate Bluetooth pairing mode on startup. |
+| `verbose` | bool | `false` | If `true`, enables verbose logging for Bluetooth operations. |
+| `identification` | string | `""` | A tag appended to the Bluetooth device name. If set, the device appears as `whalepi_<identification>` during pairing (e.g. `"X12"` → device name `"whalepi_X12"`). If empty, the device name is just `"whalepi"`. |
 
 ## Terminal UI
 
