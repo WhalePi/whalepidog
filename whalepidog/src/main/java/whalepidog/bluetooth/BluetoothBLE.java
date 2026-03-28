@@ -134,41 +134,75 @@ public class BluetoothBLE implements BluetoothInterface {
 
     // ── BLE Server ───────────────────────────────────────────────────────────
 
+    private static final int MAX_RETRIES = 3;
+    private static final long INITIAL_RETRY_DELAY_MS = 5000;
+
     private void runServer() {
-        try {
-            log("=== Starting BLE server ===");
-            
-            if (!startPythonBLEServer()) {
-                logErr("Failed to start Python BLE server");
-                return;
-            }
-            
-            // Start thread to read from Python process
-            outputReaderThread = new Thread(this::readFromPythonProcess, "ble-reader");
-            outputReaderThread.setDaemon(true);
-            outputReaderThread.start();
-            
-            // Monitor process
-            while (serverRunning && pythonProcess != null && pythonProcess.isAlive()) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
+        int attempt = 0;
+        while (serverRunning && attempt < MAX_RETRIES) {
+            attempt++;
+            try {
+                log("=== Starting BLE server (attempt " + attempt + "/" + MAX_RETRIES + ") ===");
+
+                if (!startPythonBLEServer()) {
+                    logErr("Failed to start Python BLE server");
+                    if (attempt < MAX_RETRIES && serverRunning) {
+                        long delay = INITIAL_RETRY_DELAY_MS * attempt;
+                        log("Retrying in " + (delay / 1000) + " seconds...");
+                        Thread.sleep(delay);
+                        continue;
+                    }
+                    return;
+                }
+
+                // Start thread to read from Python process
+                outputReaderThread = new Thread(this::readFromPythonProcess, "ble-reader");
+                outputReaderThread.setDaemon(true);
+                outputReaderThread.start();
+
+                // Monitor process
+                while (serverRunning && pythonProcess != null && pythonProcess.isAlive()) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                }
+
+                if (pythonProcess != null && !pythonProcess.isAlive()) {
+                    int exitCode = pythonProcess.exitValue();
+                    logErr("Python BLE server exited with code: " + exitCode);
+                    cleanup();
+                    if (exitCode != 0 && attempt < MAX_RETRIES && serverRunning) {
+                        long delay = INITIAL_RETRY_DELAY_MS * attempt;
+                        log("Retrying in " + (delay / 1000) + " seconds...");
+                        Thread.sleep(delay);
+                        continue;
+                    }
+                }
+                break; // exit retry loop on clean exit or after exhausting retries
+
+            } catch (InterruptedException e) {
+                break;
+            } catch (Exception e) {
+                logErr("BLE server error: " + e.getMessage());
+                e.printStackTrace();
+                cleanup();
+                if (attempt < MAX_RETRIES && serverRunning) {
+                    try {
+                        long delay = INITIAL_RETRY_DELAY_MS * attempt;
+                        log("Retrying in " + (delay / 1000) + " seconds...");
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        break;
+                    }
+                } else {
                     break;
                 }
             }
-            
-            if (pythonProcess != null && !pythonProcess.isAlive()) {
-                int exitCode = pythonProcess.exitValue();
-                logErr("Python BLE server exited with code: " + exitCode);
-            }
-            
-        } catch (Exception e) {
-            logErr("BLE server error: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            cleanup();
-            log("=== BLE server stopped ===");
         }
+        cleanup();
+        log("=== BLE server stopped ===");
     }
 
     /**

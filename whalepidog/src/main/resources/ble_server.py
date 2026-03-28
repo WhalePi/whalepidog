@@ -186,10 +186,32 @@ class BLEPeripheral:
                 if not adapters:
                     self.log("ERROR: No Bluetooth adapters found")
                     return False
-                adapter_address = str(adapters[0].address)
+                bt_adapter = adapters[0]
+                adapter_address = str(bt_adapter.address)
                 self.log(f"Using Bluetooth adapter: {adapter_address}")
             except Exception as e:
                 self.log(f"ERROR: Could not discover Bluetooth adapter: {e}")
+                return False
+
+            # --- Ensure the adapter is powered on --------------------------
+            try:
+                if not bt_adapter.powered:
+                    self.log("Bluetooth adapter is not powered – powering on...")
+                    bt_adapter.powered = True
+                    import time
+                    # Give BlueZ a moment to bring the adapter up
+                    for _ in range(10):
+                        time.sleep(0.5)
+                        if bt_adapter.powered:
+                            break
+                    if not bt_adapter.powered:
+                        self.log("ERROR: Failed to power on Bluetooth adapter")
+                        return False
+                    self.log("Bluetooth adapter powered on successfully")
+                else:
+                    self.log("Bluetooth adapter is already powered on")
+            except Exception as e:
+                self.log(f"ERROR: Could not power on Bluetooth adapter: {e}")
                 return False
 
             # --- Create the peripheral with the correct adapter address -----

@@ -7,6 +7,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -36,6 +39,14 @@ public class PamProcess {
     /** Listeners notified whenever a new line is captured. */
     private final List<Consumer<String>> lineListeners = new CopyOnWriteArrayList<>();
 
+    /**
+     * Path to the temporary working copy of the .psfx settings file.
+     * PAMGuard is launched with this copy so that the original is never
+     * modified or corrupted by PAMGuard (e.g. during a crash / forced kill).
+     * {@code null} when no copy exists.
+     */
+    private volatile File workingPsfxFile;
+
     public PamProcess(WhalePIDogSettings settings) {
         this.settings = settings;
     }
@@ -51,6 +62,9 @@ public class PamProcess {
     public boolean launch() {
         // Set microphone volume to zero before starting PAMGuard
         setMicrophoneVolume();
+
+        // Create a working copy of the .psfx file to protect the original
+        createWorkingPsfxCopy();
 
         String commandLine = buildCommandLine();
         broadcastLine("[WhalePIDog] Launching PAMGuard: " + commandLine);
@@ -88,6 +102,7 @@ public class PamProcess {
             p.destroyForcibly();
             process = null;
         }
+        deleteWorkingPsfxCopy();
     }
 
     /**
@@ -153,8 +168,11 @@ public class PamProcess {
 
         sb.append(" -jar \"").append(settings.getPamguardJar()).append('"');
 
-        // PAMGuard-specific arguments
-        String psf = settings.getPsfxFile();
+        // PAMGuard-specific arguments – use the working copy of the .psfx
+        // file if available, otherwise fall back to the original path.
+        String psf = (workingPsfxFile != null)
+                   ? workingPsfxFile.getAbsolutePath()
+                   : settings.getPsfxFile();
         if (psf != null && !psf.isBlank())
             sb.append(" -psf \"").append(psf).append('"');
 
@@ -188,6 +206,73 @@ public class PamProcess {
         if (other != null && !other.isBlank()) sb.append(' ').append(other);
 
         return sb.toString();
+    }
+
+    // ── PSFX working-copy helpers ───────────────────────────────────────────
+
+    /**
+     * Create a temporary working copy of the original {@code .psfx} settings
+     * file.  PAMGuard will be launched with this copy so that the original
+     * file is never modified or corrupted – even if PAMGuard crashes or is
+     * forcefully terminated.
+     *
+     * <p>The working copy is placed in the same directory as the original
+     * with the suffix {@code _working.psfx}.
+     */
+    private void createWorkingPsfxCopy() {
+        String psfx = settings.getPsfxFile();
+        if (psfx == null || psfx.isBlank()) {
+            workingPsfxFile = null;
+            return;
+        }
+
+        Path original = Path.of(psfx);
+        if (!Files.exists(original)) {
+            broadcastLine("[WhalePIDog] WARNING: .psfx file not found: " + psfx
+                        + " – will pass original path to PAMGuard.");
+            workingPsfxFile = null;
+            return;
+        }
+
+        try {
+            // Derive the working-copy name: e.g. myConfig.psfx -> myConfig_working.psfx
+            String name = original.getFileName().toString();
+            String workingName;
+            int dot = name.lastIndexOf('.');
+            if (dot > 0) {
+                workingName = name.substring(0, dot) + "_working" + name.substring(dot);
+            } else {
+                workingName = name + "_working";
+            }
+
+            Path workingPath = original.resolveSibling(workingName);
+            Files.copy(original, workingPath, StandardCopyOption.REPLACE_EXISTING);
+            workingPsfxFile = workingPath.toFile();
+
+            broadcastLine("[WhalePIDog] Created working .psfx copy: " + workingPath);
+            broadcastLine("[WhalePIDog] Original .psfx is protected: " + original);
+        } catch (IOException e) {
+            broadcastLine("[WhalePIDog] WARNING: Failed to create working .psfx copy: "
+                        + e.getMessage() + " – will use original.");
+            workingPsfxFile = null;
+        }
+    }
+
+    /**
+     * Delete the temporary working copy of the {@code .psfx} file, if it exists.
+     */
+    private void deleteWorkingPsfxCopy() {
+        File wf = workingPsfxFile;
+        if (wf != null) {
+            try {
+                Files.deleteIfExists(wf.toPath());
+                broadcastLine("[WhalePIDog] Deleted working .psfx copy: " + wf.getAbsolutePath());
+            } catch (IOException e) {
+                broadcastLine("[WhalePIDog] WARNING: Could not delete working .psfx copy: "
+                            + e.getMessage());
+            }
+            workingPsfxFile = null;
+        }
     }
 
     // ── Output capture ───────────────────────────────────────────────────────
