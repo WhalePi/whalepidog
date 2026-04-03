@@ -300,6 +300,20 @@ public class BluetoothCommands implements BluetoothInterface {
                 return;
             }
 
+            // Handle deletewav commands locally (not a PAMGuard UDP command)
+            if (command.toLowerCase().startsWith("deletewav")) {
+                String response = DeleteDataHandler.handleDeleteWav(command, watchdog, this::sendCopyProgress);
+                sendResponse(command, response);
+                return;
+            }
+
+            // Handle deletedatabase commands locally (not a PAMGuard UDP command)
+            if (command.toLowerCase().startsWith("deletedatabase")) {
+                String response = DeleteDataHandler.handleDeleteDatabase(command, watchdog, this::sendCopyProgress);
+                sendResponse(command, response);
+                return;
+            }
+
             String response;
             if (command.equalsIgnoreCase("status")) {
                 // For Bluetooth, return an XML status message with watchdog info

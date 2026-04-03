@@ -231,10 +231,10 @@ public class WatchdogController {
 
         log(String.format("Scheduling health-check every %d s, summary every %d s.", checkSec, summarySec));
 
-        checkFuture = scheduler.scheduleAtFixedRate(
+        checkFuture = scheduler.scheduleWithFixedDelay(
                 this::doHealthCheck, checkSec, checkSec, TimeUnit.SECONDS);
 
-        summaryFuture = scheduler.scheduleAtFixedRate(
+        summaryFuture = scheduler.scheduleWithFixedDelay(
                 this::doSummary, 2, summarySec, TimeUnit.SECONDS);
     }
 
@@ -265,6 +265,11 @@ public class WatchdogController {
 
         String statusName = statusName(status);
         log(String.format("[HealthCheck] ping OK  status=%d (%s)", status, statusName));
+
+        if (status == PamUDP.PAM_STALLED) {
+            log("PAMGuard reports STALLED – restarting.");
+            handleRestart();
+        }
     }
 
     private void handleRestart() {

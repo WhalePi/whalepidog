@@ -1,5 +1,6 @@
 package whalepidog.ui;
 
+import whalepidog.bluetooth.DeleteDataHandler;
 import whalepidog.process.CopyDataTask;
 import whalepidog.process.CopyDataTask.ExternalVolume;
 import whalepidog.settings.WhalePIDogSettings;
@@ -248,6 +249,7 @@ public class TerminalUI {
         sb.append(ANSI_BOLD).append("--- Controls ---").append(ANSI_RESET).append("\n");
         sb.append("  [:] Command  [s] Summary View  [t] Summary Text  [l] Log  [q] Quit  [h] Help\n");
         sb.append("  [1] ping  [2] Status  [3] summary  [4] start  [5] stop  [copydata] Copy to USB\n");
+        sb.append("  [deletewav] Delete recordings  [deletedatabase] Delete database\n");
 
         // Erase leftover lines from any previous (taller) frame, then restore cursor.
         sb.append(ANSI_ERASE_DOWN).append(ANSI_SHOW_CUR);
@@ -496,6 +498,216 @@ public class TerminalUI {
         else                                             switchToLog();
     }
 
+    // ── DELETE WAV mode ────────────────────────────────────────────────────
+
+    /**
+     * Interactive flow for the {@code deletewav} command.
+     *
+     * <ol>
+     *   <li>Check PAMGuard is not running – if it is, tell the user to stop first.</li>
+     *   <li>Show what will be deleted and ask for confirmation.</li>
+     *   <li>Delete the wavFolder contents.</li>
+     * </ol>
+     */
+    private void enterDeleteWavMode() {
+        priorMode = mode.get();
+        mode.set(DisplayMode.COMMAND);   // suppress scheduled renders
+
+        synchronized (renderLock) {
+            System.out.println();
+            System.out.println(ANSI_BOLD + ANSI_RED + "--- Delete Recordings ---" + ANSI_RESET);
+        }
+
+        // 1. Check PAMGuard is not actively processing data
+        if (watchdog.getPamProcess().isAlive() && watchdog.getPamStatus() == PamUDP.PAM_RUNNING) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "PAMGuard is currently processing data. Please stop PAMGuard first "
+                        + "(press 5 or type 'stop')." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromDeleteMode();
+            return;
+        }
+
+        // 2. Show what will be deleted
+        String wavFolder = settings.getWavFolder();
+
+        if (wavFolder == null || wavFolder.isBlank()) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "No wavFolder configured in settings. Nothing to delete." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromDeleteMode();
+            return;
+        }
+
+        synchronized (renderLock) {
+            System.out.println();
+            System.out.println(ANSI_BOLD + ANSI_RED + "WARNING: This will permanently delete all files in:" + ANSI_RESET);
+            System.out.println(ANSI_YELLOW + "  " + wavFolder + ANSI_RESET);
+            System.out.println();
+            System.out.println(ANSI_BOLD + "Are you sure? Type 'yes' to confirm, or 'back' to cancel." + ANSI_RESET);
+            System.out.flush();
+        }
+
+        // 3. Prompt for confirmation
+        if (!promptConfirmation(ANSI_BOLD + ANSI_RED + "DeleteWav> " + ANSI_RESET)) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_YELLOW + "Delete cancelled." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromDeleteMode();
+            return;
+        }
+
+        // 4. Execute deletion
+        Consumer<String> progressCb = msg -> {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "[DeleteWav] " + ANSI_RESET + msg);
+                System.out.flush();
+            }
+            broadcastBluetoothProgress(msg);
+        };
+
+        String result = DeleteDataHandler.handleDeleteWav("deletewav yes", watchdog, progressCb);
+
+        synchronized (renderLock) {
+            if (result.startsWith("ERROR")) {
+                System.out.println(ANSI_RED + ANSI_BOLD + result + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + ANSI_BOLD + result + ANSI_RESET);
+            }
+            System.out.println();
+            System.out.flush();
+        }
+
+        returnFromDeleteMode();
+    }
+
+    // ── DELETE DATABASE mode ─────────────────────────────────────────────────
+
+    /**
+     * Interactive flow for the {@code deletedatabase} command.
+     *
+     * <ol>
+     *   <li>Check PAMGuard is not running – if it is, tell the user to stop first.</li>
+     *   <li>Show what will be deleted and ask for confirmation.</li>
+     *   <li>Delete and recreate a blank database.</li>
+     * </ol>
+     */
+    private void enterDeleteDatabaseMode() {
+        priorMode = mode.get();
+        mode.set(DisplayMode.COMMAND);   // suppress scheduled renders
+
+        synchronized (renderLock) {
+            System.out.println();
+            System.out.println(ANSI_BOLD + ANSI_RED + "--- Delete Database ---" + ANSI_RESET);
+        }
+
+        // 1. Check PAMGuard is not actively processing data
+        if (watchdog.getPamProcess().isAlive() && watchdog.getPamStatus() == PamUDP.PAM_RUNNING) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "PAMGuard is currently processing data. Please stop PAMGuard first "
+                        + "(press 5 or type 'stop')." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromDeleteMode();
+            return;
+        }
+
+        // 2. Show what will be deleted
+        String database = settings.getDatabase();
+
+        if (database == null || database.isBlank()) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "No database configured in settings. Nothing to delete." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromDeleteMode();
+            return;
+        }
+
+        synchronized (renderLock) {
+            System.out.println();
+            System.out.println(ANSI_BOLD + ANSI_RED + "WARNING: This will permanently delete and recreate a blank database:" + ANSI_RESET);
+            System.out.println(ANSI_YELLOW + "  " + database + ANSI_RESET);
+            System.out.println();
+            System.out.println(ANSI_BOLD + "Are you sure? Type 'yes' to confirm, or 'back' to cancel." + ANSI_RESET);
+            System.out.flush();
+        }
+
+        // 3. Prompt for confirmation
+        if (!promptConfirmation(ANSI_BOLD + ANSI_RED + "DeleteDB> " + ANSI_RESET)) {
+            synchronized (renderLock) {
+                System.out.println(ANSI_YELLOW + "Delete cancelled." + ANSI_RESET);
+                System.out.println();
+                System.out.flush();
+            }
+            returnFromDeleteMode();
+            return;
+        }
+
+        // 4. Execute deletion
+        Consumer<String> progressCb = msg -> {
+            synchronized (renderLock) {
+                System.out.println(ANSI_RED + "[DeleteDB] " + ANSI_RESET + msg);
+                System.out.flush();
+            }
+            broadcastBluetoothProgress(msg);
+        };
+
+        String result = DeleteDataHandler.handleDeleteDatabase("deletedatabase yes", watchdog, progressCb);
+
+        synchronized (renderLock) {
+            if (result.startsWith("ERROR")) {
+                System.out.println(ANSI_RED + ANSI_BOLD + result + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + ANSI_BOLD + result + ANSI_RESET);
+            }
+            System.out.println();
+            System.out.flush();
+        }
+
+        returnFromDeleteMode();
+    }
+
+    // ── Shared delete helpers ────────────────────────────────────────────────
+
+    /**
+     * Prompt the user for a yes/no confirmation.
+     *
+     * @param prompt the prompt string to display
+     * @return {@code true} if the user confirmed, {@code false} otherwise
+     */
+    private boolean promptConfirmation(String prompt) {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        System.out.print(prompt);
+        System.out.flush();
+        try {
+            String input = br.readLine();
+            if (input != null) {
+                String trimmed = input.trim().toLowerCase();
+                return trimmed.equals("yes") || trimmed.equals("y")
+                        || trimmed.equals("confirm") || trimmed.equals("ok");
+            }
+        } catch (IOException e) {
+            // fall through as not confirmed
+        }
+        return false;
+    }
+
+    private void returnFromDeleteMode() {
+        mode.set(priorMode);
+        if      (priorMode == DisplayMode.SUMMARY_VIEW) switchToSummaryView();
+        else if (priorMode == DisplayMode.SUMMARY_TEXT) switchToSummaryText();
+        else                                             switchToLog();
+    }
+
     /**
      * Send a progress message to the Bluetooth interface (if connected).
      * This is a best-effort operation – errors are silently ignored.
@@ -587,6 +799,8 @@ public class TerminalUI {
             case "4"  -> quickSend(PamUDP.CMD_START);
             case "5"  -> quickSend(PamUDP.CMD_STOP);
             case "copydata" -> enterCopyDataMode();
+            case "deletewav" -> enterDeleteWavMode();
+            case "deletedatabase" -> enterDeleteDatabaseMode();
             default -> {
                 for (String cmd : KNOWN_COMMANDS) {
                     if (raw.equalsIgnoreCase(cmd)) { quickSend(cmd); return; }
@@ -731,8 +945,12 @@ public class TerminalUI {
                 System.out.println("    Empty line or 'back' returns to the previous view.");
                 System.out.println();
                 System.out.println("  Data management:");
-                System.out.println("    copydata  - Copy wavFolder to an external USB drive");
-                System.out.println("                (PAMGuard must be stopped first)");
+                System.out.println("    copydata        - Copy wavFolder to an external USB drive");
+                System.out.println("                      (PAMGuard must be stopped first)");
+                System.out.println("    deletewav       - Delete all recordings in wavFolder");
+                System.out.println("                      (PAMGuard must be stopped first)");
+                System.out.println("    deletedatabase  - Delete and recreate a blank database");
+                System.out.println("                      (PAMGuard must be stopped first)");
                 System.out.println();
                 System.out.println("  q  - Quit    h  - Help");
                 System.out.println(ANSI_BOLD + "================================================================" + ANSI_RESET);
