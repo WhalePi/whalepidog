@@ -119,13 +119,17 @@ public class SummaryView {
             appendPiTemperature(sb, ps.piTemperature);
         }
 
+        if (ps.pamguardDatabase != null) {
+            appendPamguardDatabase(sb, ps.pamguardDatabase);
+        }
+
         for (RawSection sec : ps.unknownSections) {
             appendRawSection(sb, sec);
         }
 
         if (ps.soundAcquisition == null && ps.soundRecorder == null && ps.gps == null
                 && ps.nmea == null && ps.analogSensors == null && ps.piTemperature == null
-                && ps.unknownSections.isEmpty()) {
+                && ps.pamguardDatabase == null && ps.unknownSections.isEmpty()) {
             sb.append(YL).append("  (no summary data yet – waiting for PAMGuard)").append(R).append("\n");
         }
 
@@ -336,6 +340,32 @@ public class SummaryView {
         if (t > 80) sb.append("  ").append(RD).append(B).append("[ HOT! ]").append(R);
         else if (t > 70) sb.append("  ").append(YL).append("[ WARM  ]").append(R);
         sb.append("\n");
+
+        sb.append(B).append(CY).append("  └").append(thin(59)).append(R).append("\n\n");
+    }
+
+    // ── Pamguard Database ─────────────────────────────────────────────────────
+
+    private void appendPamguardDatabase(StringBuilder sb, PamguardDatabaseData data) {
+        sb.append(B).append(CY).append("  ┌─ Pamguard Database ").append(thin(39)).append(R).append("\n");
+
+        // Database name
+        sb.append(B).append(CY).append("  │ ").append(R)
+          .append("DB     : ").append(B).append(data.dbName).append(R).append("\n");
+
+        // Writes and Fails with colour indicators
+        String failsColor = data.fails > 0 ? RD : GR;
+        sb.append(B).append(CY).append("  │ ").append(R)
+          .append("Writes : ").append(B).append(GR).append(data.writes).append(R)
+          .append("   Fails: ").append(failsColor).append(B).append(data.fails).append(R);
+        if (data.fails > 0) sb.append("  ").append(RD).append(B).append("[ !! ]").append(R);
+        sb.append("\n");
+
+        // Auto-commit status
+        String acLabel = data.autoCommit == 0 ? "OFF" : "ON";
+        String acColor = data.autoCommit == 0 ? DM : YL;
+        sb.append(B).append(CY).append("  │ ").append(R)
+          .append("Commit : ").append(acColor).append(acLabel).append(R).append("\n");
 
         sb.append(B).append(CY).append("  └").append(thin(59)).append(R).append("\n\n");
     }

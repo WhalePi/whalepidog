@@ -92,14 +92,6 @@ public class WatchdogController {
             log("Watchdog already running – ignoring start()");
             return;
         }
-        
-        try {
-        	//Temporary to allow for debugging
-			Thread.sleep(5000);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 
         try {
             udp = new PamUDP(settings.getUdpPort());
@@ -246,6 +238,15 @@ public class WatchdogController {
     // ── Health check ─────────────────────────────────────────────────────────
 
     private void doHealthCheck() {
+        // Skip health checks if the watchdog is not in the RUNNING state.
+        // During RESTARTING / WAITING_FOR_INIT / STARTING the process is
+        // expected to be unresponsive – no point triggering another restart.
+        State current = state.get();
+        if (current != State.RUNNING) {
+            log(String.format("[HealthCheck] skipped – state is %s", current));
+            return;
+        }
+
         lastCheckTime.set(TS_FMT.format(Instant.now()));
 
         if (!pamProcess.isAlive()) {
@@ -273,6 +274,17 @@ public class WatchdogController {
     }
 
     private void handleRestart() {
+        // Guard: if a restart (or init-wait) is already in progress, do NOT
+        // launch a second PAMGuard instance.  The state is set to RESTARTING
+        // or WAITING_FOR_INIT by the first thread that gets here; any later
+        // thread that also detected a failure will see this and bail out.
+        State current = state.get();
+        if (current == State.RESTARTING || current == State.WAITING_FOR_INIT
+                || current == State.STARTING) {
+            log("handleRestart() skipped – already in state " + current);
+            return;
+        }
+
         setState(State.RESTARTING);
         cancelScheduledTasks();
         restartCount.incrementAndGet();

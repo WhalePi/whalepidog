@@ -60,6 +60,16 @@ public class PamProcess {
      * @return {@code true} if the OS process started without error
      */
     public boolean launch() {
+        // Safety guard: refuse to launch if a PAMGuard process is already alive.
+        // The caller should kill the previous process first. This prevents two
+        // PAMGuard instances from running simultaneously (e.g. due to a race
+        // in the watchdog restart logic), which would cause database errors.
+        Process existing = process;
+        if (existing != null && existing.isAlive()) {
+            broadcastLine("[WhalePIDog] WARNING: launch() called while PAMGuard is still alive – refusing to start a second instance.");
+            return false;
+        }
+
         // Set microphone volume to zero before starting PAMGuard
         setMicrophoneVolume();
 
@@ -98,8 +108,28 @@ public class PamProcess {
     public void kill() {
         Process p = process;
         if (p != null) {
-            broadcastLine("[WhalePIDog] Destroying PAMGuard process.");
+            broadcastLine("[WhalePIDog] Destroying PAMGuard process tree.");
+            // PAMGuard is launched via "/bin/sh -c <cmd>", so the Process
+            // handle points to the shell.  destroyForcibly() would only kill
+            // the shell, potentially orphaning the child Java/PAMGuard process.
+            // Kill all descendant processes first, then the shell itself.
+            try {
+                p.descendants().forEach(child -> {
+                    broadcastLine("[WhalePIDog]   Killing child PID " + child.pid());
+                    child.destroyForcibly();
+                });
+            } catch (Exception e) {
+                broadcastLine("[WhalePIDog]   WARNING: Error killing descendants: " + e.getMessage());
+            }
             p.destroyForcibly();
+            try {
+                // Wait briefly for the process to actually terminate so that
+                // any subsequent launch() doesn't race with a dying process
+                // that still holds the database lock.
+                p.waitFor(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             process = null;
         }
         deleteWorkingPsfxCopy();

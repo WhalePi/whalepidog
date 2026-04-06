@@ -36,6 +36,7 @@ public class SummaryParser {
         public NmeaData              nmea;              // may be null
         public AnalogSensorsData     analogSensors;     // may be null
         public PiTemperatureData     piTemperature;     // may be null
+        public PamguardDatabaseData  pamguardDatabase;  // may be null
         /** Any sections we didn't recognise, stored as raw key→value pairs. */
         public final List<RawSection> unknownSections = new ArrayList<>();
     }
@@ -94,6 +95,13 @@ public class SummaryParser {
 
     public static class PiTemperatureData {
         public double tempCelsius;
+    }
+
+    public static class PamguardDatabaseData {
+        public String dbName;
+        public int    autoCommit;
+        public long   writes;
+        public long   fails;
     }
 
     public static class SystemDiagnosticsData {
@@ -167,6 +175,12 @@ public class SummaryParser {
         if (closeAngle < 0) return;
         String tag = line.substring(1, closeAngle).trim();
 
+        // Skip the PAMGUARD envelope block – it contains internal metadata
+        // (SYSTIME, STATUS, STATE) that is not a displayable module section.
+        // Also skip the standalone closing tag <\PAMGUARD> / </PAMGUARD>.
+        if (tag.equalsIgnoreCase("PAMGUARD") || tag.equalsIgnoreCase("\\PAMGUARD")
+                || tag.equalsIgnoreCase("/PAMGUARD")) return;
+
         // Fix the non-standard closing tag <\Tag> → </Tag> so XML parsers accept it
         String fixed = line.replaceAll("<\\\\", "</");
 
@@ -188,6 +202,8 @@ public class SummaryParser {
                 result.analogSensors = parseAnalogSensors(inner);
             } else if (tag.equalsIgnoreCase("Pi Temperature")) {
                 result.piTemperature = parsePiTemperature(inner);
+            } else if (tag.equalsIgnoreCase("Pamguard Database")) {
+                result.pamguardDatabase = parsePamguardDatabase(inner);
             } else {
                 result.unknownSections.add(new RawSection(tag, inner));
             }
@@ -303,6 +319,25 @@ public class SummaryParser {
                 data.tempCelsius = Double.parseDouble(rest);
             }
         } catch (Exception ignored) {}
+        return data;
+    }
+
+    private static PamguardDatabaseData parsePamguardDatabase(String inner) {
+        // inner looks like "Database:<DBNAME>whalepi_database.sqlite3</DBNAME><AUTOCOMMIT>0</AUTOCOMMIT><WRITES>5</WRITES><FAILS>0</FAILS>"
+        PamguardDatabaseData data = new PamguardDatabaseData();
+        try {
+            // Strip the prefix before XML tags (e.g. "Database:")
+            int xmlStart = inner.indexOf('<');
+            String xmlPart = xmlStart >= 0 ? inner.substring(xmlStart) : inner;
+            Document doc = parseXml("<root>" + xmlPart + "</root>");
+            data.dbName     = textContent(doc, "DBNAME", "");
+            data.autoCommit = (int) longContent(doc, "AUTOCOMMIT", 0);
+            data.writes     = longContent(doc, "WRITES", 0);
+            data.fails      = longContent(doc, "FAILS", 0);
+        } catch (Exception e) {
+            // fallback: try to extract dbName from raw text
+            data.dbName = inner;
+        }
         return data;
     }
 
