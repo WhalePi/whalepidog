@@ -94,6 +94,13 @@ public class WhalePIDogSettings {
      */
     private int startWaitSeconds = 10;
 
+    /**
+     * Maximum number of consecutive PAMGuard restarts before the watchdog
+     * triggers a full system reboot.  Set to {@code 0} to disable automatic
+     * rebooting.  Default: 5.
+     */
+    private int maxRestartsBeforeReboot = 5;
+
     // ── Miscellaneous ────────────────────────────────────────────────────────
 
     /** Working directory for the PAMGuard process. If empty, the jar directory is used. */
@@ -160,6 +167,9 @@ public class WhalePIDogSettings {
     public int getStartWaitSeconds() { return startWaitSeconds; }
     public void setStartWaitSeconds(int startWaitSeconds) { this.startWaitSeconds = startWaitSeconds; }
 
+    public int getMaxRestartsBeforeReboot() { return maxRestartsBeforeReboot; }
+    public void setMaxRestartsBeforeReboot(int maxRestartsBeforeReboot) { this.maxRestartsBeforeReboot = maxRestartsBeforeReboot; }
+
     public String getWorkingFolder() { return workingFolder; }
     public void setWorkingFolder(String workingFolder) { this.workingFolder = workingFolder; }
 
@@ -187,6 +197,7 @@ public class WhalePIDogSettings {
                 ", checkIntervalSeconds=" + checkIntervalSeconds +
                 ", summaryIntervalSeconds=" + summaryIntervalSeconds +
                 ", startWaitSeconds=" + startWaitSeconds +
+                ", maxRestartsBeforeReboot=" + maxRestartsBeforeReboot +
                 '}';
     }
 }

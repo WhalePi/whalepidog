@@ -2,6 +2,7 @@
     "daemon": false,
     "pamguardJar": "/home/jdjm/Desktop/pamguard_pi5/Pamguard-2.02.18.jar",
     "startWaitSeconds": 10,
+    "maxRestartsBeforeReboot": 5,
     "psfxFile": "/home/jdjm/Desktop/pamguard_pi5/pamguard_pi5.psfx",
     "otherOptions": "",
     "soundCardName": "",

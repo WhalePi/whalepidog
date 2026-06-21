@@ -39,6 +39,7 @@ import java.io.File;
  *   "checkIntervalSeconds"   : 30,
  *   "summaryIntervalSeconds" : 5,
  *   "startWaitSeconds"       : 10,
+ *   "maxRestartsBeforeReboot": 5,
  *   "workingFolder"          : ""
  * }
  * </pre>
@@ -48,7 +49,7 @@ public class WhalePIDog {
     public static void main(String[] args) {
 
         System.out.println("╔══════════════════════════════════════════╗");
-        System.out.println("║          WhalePIDog  v1.0.1              ║");
+        System.out.println("║          WhalePIDog  v1.0.2             ║");
         System.out.println("║  PAMGuard Watchdog for Raspberry Pi      ║");
         System.out.println("╚══════════════════════════════════════════╝");
 

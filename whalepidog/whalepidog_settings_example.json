@@ -16,6 +16,7 @@
   "checkIntervalSeconds": 30,
   "summaryIntervalSeconds": 5,
   "startWaitSeconds": 10,
+  "maxRestartsBeforeReboot": 5,
   "workingFolder": "",
   "bluetoothSettings": {
     "bluetoothEnabled": false,

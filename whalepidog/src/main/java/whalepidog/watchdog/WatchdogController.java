@@ -287,7 +287,20 @@ public class WatchdogController {
 
         setState(State.RESTARTING);
         cancelScheduledTasks();
-        restartCount.incrementAndGet();
+        int count = restartCount.incrementAndGet();
+
+        // Check if we've exceeded the maximum number of restarts before rebooting
+        int maxRestarts = settings.getMaxRestartsBeforeReboot();
+        if (maxRestarts > 0 && count >= maxRestarts) {
+            log(String.format("Restart count (%d) reached maxRestartsBeforeReboot (%d) – rebooting system!",
+                    count, maxRestarts));
+            // Kill PAMGuard before rebooting
+            if (udp != null) udp.sendExit(2000);
+            sleep(2000);
+            pamProcess.kill();
+            rebootSystem();
+            return;
+        }
 
         // Try a graceful exit first
         if (udp != null) udp.sendExit(2000);
@@ -528,6 +541,34 @@ public class WatchdogController {
 
     private static void sleep(long ms) {
         try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
+
+    /**
+     * Trigger a full system reboot.  Uses {@code sudo shutdown -r now}.
+     * If the reboot command fails (e.g. no sudo privileges), the watchdog
+     * falls back to {@link State#ERROR}.
+     */
+    private void rebootSystem() {
+        log("=== SYSTEM REBOOT initiated by WhalePIDog ===");
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sudo", "shutdown", "-r", "now");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            // Read any output for logging
+            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log("[Reboot] " + line);
+                }
+            }
+            boolean finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                log("Reboot command issued – system should restart momentarily.");
+            }
+        } catch (Exception e) {
+            log("ERROR: Failed to execute reboot command – " + e.getMessage());
+            setState(State.ERROR);
+        }
     }
 
     public static String statusName(int code) {

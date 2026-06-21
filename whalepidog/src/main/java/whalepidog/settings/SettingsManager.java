@@ -31,6 +31,7 @@ import whalepidog.bluetooth.BluetoothSettings;
  *   "checkIntervalSeconds"   : 30,
  *   "summaryIntervalSeconds" : 5,
  *   "startWaitSeconds"       : 10,
+ *   "maxRestartsBeforeReboot": 5,
  *   "workingFolder"          : ""
  * }
  * </pre>
@@ -74,6 +75,7 @@ public class SettingsManager {
             if (jo.has("checkIntervalSeconds"))                                           s.setCheckIntervalSeconds(jo.getInt("checkIntervalSeconds"));
             if (jo.has("summaryIntervalSeconds"))                                         s.setSummaryIntervalSeconds(jo.getInt("summaryIntervalSeconds"));
             if (jo.has("startWaitSeconds"))                                               s.setStartWaitSeconds(jo.getInt("startWaitSeconds"));
+            if (jo.has("maxRestartsBeforeReboot"))                                         s.setMaxRestartsBeforeReboot(jo.getInt("maxRestartsBeforeReboot"));
             if (jo.has("workingFolder")          && !jo.isNull("workingFolder"))          s.setWorkingFolder(jo.getString("workingFolder"));
 
             // Load Bluetooth settings if present
@@ -125,6 +127,7 @@ public class SettingsManager {
         jo.put("checkIntervalSeconds",   settings.getCheckIntervalSeconds());
         jo.put("summaryIntervalSeconds", settings.getSummaryIntervalSeconds());
         jo.put("startWaitSeconds",       settings.getStartWaitSeconds());
+        jo.put("maxRestartsBeforeReboot", settings.getMaxRestartsBeforeReboot());
         jo.put("workingFolder",          settings.getWorkingFolder());
 
         // Save Bluetooth settings
